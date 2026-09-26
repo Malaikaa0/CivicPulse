@@ -4,7 +4,7 @@ from app.lifecycle import lifespan
 from app.logging_config import configure_logging, resolve_log_level
 from app.metrics import Metrics
 from app.middleware import ObservabilityMiddleware
-from app.routes import health, metrics, ready
+from app.routes import complaints, health, meta, metrics, ready, stats
 from app.routes.errors import register_error_handlers
 
 
@@ -15,6 +15,9 @@ def create_app() -> FastAPI:
     app.add_middleware(ObservabilityMiddleware, metrics=app.state.metrics)
     app.include_router(health.router)
     app.include_router(ready.router)
+    app.include_router(complaints.router)
+    app.include_router(stats.router)
+    app.include_router(meta.router)
     app.include_router(metrics.router)
     register_error_handlers(app)
     return app

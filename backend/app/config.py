@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     stats_cache_ttl_seconds: int = 30
     rate_limit_requests: int = 10
     rate_limit_window_seconds: int = 60
+    # Off by default: X-Forwarded-For is client-controlled unless a proxy we run overwrites it, so
+    # trusting it blindly lets anyone dodge the rate limit by sending a different value each time.
+    trust_forwarded_for: bool = False
 
     log_level: str = "INFO"
 
