@@ -101,6 +101,15 @@ def configure_logging(level: str = DEFAULT_LEVEL) -> None:
     # root handler instead, and let them inherit the level, so LOG_LEVEL is the single knob.
     for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
         uvicorn_logger = logging.getLogger(name)
+        # --no-access-log works by stripping this logger's handlers and propagation, and uvicorn
+        # then checks hasHandlers() to decide whether to emit at all. Re-enabling propagation
+        # would switch the access log back on, so leave a logger uvicorn disabled alone.
+        if (
+            name == "uvicorn.access"
+            and not uvicorn_logger.handlers
+            and not uvicorn_logger.propagate
+        ):
+            continue
         uvicorn_logger.handlers.clear()
         uvicorn_logger.propagate = True
         uvicorn_logger.setLevel(logging.NOTSET)

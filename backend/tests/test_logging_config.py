@@ -8,6 +8,7 @@ from collections.abc import Iterator
 from datetime import datetime
 
 import pytest
+from uvicorn.config import Config
 
 from app.config import get_settings
 from app.logging_config import (
@@ -241,6 +242,20 @@ def test_uvicorn_loggers_use_the_same_handler_without_duplicates(
     out = capsys.readouterr().out.splitlines()
     entries = [json.loads(line) for line in out if line.startswith("{")]
     assert sorted(e["message"] for e in entries) == sorted(f"from {n}" for n in UVICORN_LOGGERS)
+
+
+def test_an_access_log_uvicorn_disabled_stays_disabled(isolated_logging: None) -> None:
+    # Uses uvicorn's own setup for --no-access-log rather than a copy of what it does. uvicorn
+    # skips access logging when uvicorn.access has no handlers to reach (hasHandlers()).
+    Config("app.main:app", access_log=False)
+    access = logging.getLogger("uvicorn.access")
+    assert not access.hasHandlers()
+
+    configure_logging("INFO")
+    configure_logging("INFO")
+
+    assert not access.hasHandlers()
+    assert logging.getLogger("uvicorn.error").propagate is True  # the rest is still routed
 
 
 def test_configure_logging_leaves_other_root_handlers_alone(isolated_logging: None) -> None:
