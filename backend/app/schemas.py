@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+from pydantic_core import PydanticCustomError
 
 from app.domain import Category, Priority, Status, TriagedBy
 from app.services.status_machine import allowed_targets
@@ -18,6 +19,14 @@ class ComplaintCreate(BaseModel):
     text: str = Field(min_length=10, max_length=2000)
     location: str = Field(min_length=3, max_length=200)
     reporter_contact: str | None = Field(default=None, max_length=200)
+
+    @field_validator("text", "location", "reporter_contact")
+    @classmethod
+    def _no_nul_characters(cls, value: str | None) -> str | None:
+        # PostgreSQL cannot store NUL in text; left alone it would surface as a 500 on bad input.
+        if value is not None and "\x00" in value:
+            raise PydanticCustomError("nul_character", "Must not contain NUL characters")
+        return value
 
     @field_validator("reporter_contact")
     @classmethod

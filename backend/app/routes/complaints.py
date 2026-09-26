@@ -21,6 +21,8 @@ from app.services.complaints import ComplaintService
 
 router = APIRouter(prefix="/api/complaints", tags=["complaints"])
 
+MAX_PAGE = 1_000_000
+
 ServiceDep = Annotated[ComplaintService, Depends(get_complaint_service)]
 
 _BAD_REQUEST: dict[int | str, dict[str, Any]] = {
@@ -43,7 +45,9 @@ def list_complaints(
     category: Category | None = None,
     priority: Priority | None = None,
     status: Status | None = None,
-    page: Annotated[int, Query(ge=1)] = 1,
+    # The upper bound keeps the OFFSET inside PostgreSQL's bigint: without it, a huge page number
+    # is a 500 instead of a 400. It is far beyond any real data set.
+    page: Annotated[int, Query(ge=1, le=MAX_PAGE)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
 ) -> ComplaintPageOut:
     filters = ComplaintFilters(category=category, priority=priority, status=status)

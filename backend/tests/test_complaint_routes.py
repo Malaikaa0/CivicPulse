@@ -295,6 +295,13 @@ def test_the_fallback_writes_exactly_one_warning(
         ),
         ({"location": "Street 12"}, "text", "Field required"),
         ({"text": TEXT}, "location", "Field required"),
+        ({**CREATE, "text": TEXT + "\u0000"}, "text", "Must not contain NUL characters"),
+        ({**CREATE, "location": "Str\u0000eet"}, "location", "Must not contain NUL characters"),
+        (
+            {**CREATE, "reporter_contact": "03\u000000"},
+            "reporter_contact",
+            "Must not contain NUL characters",
+        ),
         ({**CREATE, "text": None}, "text", "Input should be a valid string"),
         ({**CREATE, "text": 12345678901}, "text", "Input should be a valid string"),
         ({**CREATE, "location": ["Street 12"]}, "location", "Input should be a valid string"),
@@ -492,6 +499,10 @@ def test_the_page_size_bounds_are_inclusive(client: TestClient, size: int) -> No
     assert client.get("/api/complaints", params={"page_size": size}).status_code == 200
 
 
+def test_the_last_allowed_page_is_accepted(client: TestClient, store: InMemoryStore) -> None:
+    assert client.get("/api/complaints", params={"page": 1_000_000}).status_code == 200
+
+
 @pytest.mark.parametrize(
     ("query", "field", "fragment"),
     [
@@ -501,6 +512,8 @@ def test_the_page_size_bounds_are_inclusive(client: TestClient, size: int) -> No
         ({"category": "WATER"}, "category", "Input should be"),  # values are case-sensitive
         ({"page": 0}, "page", "greater than or equal to 1"),
         ({"page": -3}, "page", "greater than or equal to 1"),
+        ({"page": 1_000_001}, "page", "less than or equal to 1000000"),
+        ({"page": 10**30}, "page", "less than or equal to 1000000"),
         ({"page": "abc"}, "page", "valid integer"),
         ({"page_size": 0}, "page_size", "greater than or equal to 1"),
         ({"page_size": 101}, "page_size", "less than or equal to 100"),
@@ -786,6 +799,7 @@ def test_openapi_describes_the_list_query_parameters(openapi: dict[str, Any]) ->
     assert set(parameters) == {"category", "priority", "status", "page", "page_size"}
     assert all(p["in"] == "query" and p["required"] is False for p in parameters.values())
     assert parameters["page"]["schema"]["minimum"] == 1
+    assert parameters["page"]["schema"]["maximum"] == 1_000_000
     assert parameters["page_size"]["schema"]["minimum"] == 1
     assert parameters["page_size"]["schema"]["maximum"] == 100
     assert parameters["page_size"]["schema"]["default"] == 20
