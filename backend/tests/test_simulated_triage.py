@@ -108,7 +108,6 @@ def test_factory_selects_the_provider_named_in_settings() -> None:
     assert isinstance(create_triage_provider(_settings("simulated")), SimulatedTriage)
 
 
-@pytest.mark.parametrize("provider", ["llm", "ollama"])
-def test_factory_is_explicit_about_providers_not_built_yet(provider: str) -> None:
+def test_factory_is_explicit_about_providers_not_built_yet() -> None:
     with pytest.raises(NotImplementedError):
-        create_triage_provider(_settings(provider))
+        create_triage_provider(_settings("ollama"))
