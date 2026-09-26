@@ -26,6 +26,10 @@ RUN groupadd --system --gid 10001 app \
 WORKDIR /app
 COPY --from=builder /opt/venv /opt/venv
 COPY --chown=app:app app ./app
+# Migrations ship in the image so any container can bring its own database to the current
+# schema: `alembic upgrade head`.
+COPY --chown=app:app alembic.ini ./
+COPY --chown=app:app alembic ./alembic
 
 USER 10001
 
