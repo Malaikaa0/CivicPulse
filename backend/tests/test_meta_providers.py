@@ -242,17 +242,6 @@ def test_get_meta_service_is_built_from_settings(
     assert report.store_available is True
 
 
-def test_get_triage_service_is_built_once(
-    monkeypatch: pytest.MonkeyPatch, fake_store: FakeStore
-) -> None:
-    monkeypatch.setattr(ai_wiring, "get_settings", lambda: _settings())
-    ai_wiring.get_triage_service.cache_clear()
-    try:
-        assert ai_wiring.get_triage_service() is ai_wiring.get_triage_service()
-    finally:
-        ai_wiring.get_triage_service.cache_clear()
-
-
 def test_the_real_store_and_log_are_shared_per_url() -> None:
     ai_wiring.get_triage_store.cache_clear()
     ai_wiring.get_outcome_log.cache_clear()

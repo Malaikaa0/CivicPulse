@@ -27,6 +27,7 @@ from app.providers.triage.errors import (
 from app.providers.triage.simulated import SimulatedTriage
 from app.repositories.complaints import ComplaintFilters
 from app.repositories.models import Complaint
+from app.routes.rate_limit import enforce_rate_limit
 from app.services.complaints import ComplaintService
 from app.services.triage import TriageService
 
@@ -111,6 +112,8 @@ def make_client(store: InMemoryStore) -> ClientFactory:
         )
         app = create_app()
         app.dependency_overrides[get_complaint_service] = lambda: service
+        # The limiter has its own tests; here it must not reach for a Redis that is not there.
+        app.dependency_overrides[enforce_rate_limit] = lambda: None
         return TestClient(app, raise_server_exceptions=raise_server_exceptions)
 
     return factory
@@ -737,7 +740,7 @@ def test_openapi_documents_the_status_codes_each_operation_can_return(
     def codes(path: str, method: str) -> set[str]:
         return set(paths[path][method]["responses"])
 
-    assert codes("/api/complaints", "post") == {"201", "400"}
+    assert codes("/api/complaints", "post") == {"201", "400", "429"}
     assert codes("/api/complaints", "get") == {"200", "400"}
     assert codes("/api/complaints/{complaint_id}", "get") == {"200", "400", "404"}
     assert codes("/api/complaints/{complaint_id}/status", "patch") == {"200", "400", "404", "409"}

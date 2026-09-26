@@ -1,13 +1,16 @@
 """The complaint endpoints end to end: real app, real wiring, real PostgreSQL.
 
-Only the engine (pointed at the test database) and, where a test needs it, the triage provider
-are substituted. The session, repository, service and routes are the ones the app really uses.
+Only the engine (pointed at the test database), the triage provider and the Redis-backed features
+are substituted; the session, repository, service and routes are the ones the app really uses.
+The rate limiter, the stats cache and the triage cache have their own end-to-end tests in
+test_full_stack.py, which runs against a real Redis.
 """
 
 import threading
 import uuid
 from collections.abc import Callable, Iterator
 from datetime import datetime
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -16,12 +19,14 @@ from sqlalchemy import Engine, text
 from sqlalchemy.orm import Session
 
 from app import dependencies
+from app.cache_wiring import get_stats_service
 from app.config import get_settings
 from app.domain import Status
 from app.main import create_app
 from app.providers.triage.errors import TriageServerError
 from app.providers.triage.simulated import SimulatedTriage
 from app.repositories.complaints import ComplaintRepository
+from app.routes.rate_limit import enforce_rate_limit
 from app.services.triage import TriageService
 
 pytestmark = pytest.mark.integration
@@ -40,19 +45,22 @@ def make_client(engine: Engine, monkeypatch: pytest.MonkeyPatch) -> Iterator[Cli
     monkeypatch.setattr(dependencies, "get_engine", lambda: engine)
     monkeypatch.setenv("TRIAGE_PROVIDER", "simulated")
     get_settings.cache_clear()
-    dependencies.get_triage_service.cache_clear()
 
     def factory(provider: SimulatedTriage | None = None) -> TestClient:
         app = create_app()
-        if provider is not None:
-            triage = TriageService(provider, sleep=lambda _: None, jitter=lambda: 0.0)
-            app.dependency_overrides[dependencies.get_triage_service] = lambda: triage
+        triage = TriageService(
+            provider or SimulatedTriage(), sleep=lambda _: None, jitter=lambda: 0.0
+        )
+        app.dependency_overrides[dependencies.get_triage_service] = lambda: triage
+        app.dependency_overrides[enforce_rate_limit] = lambda: None
+        app.dependency_overrides[get_stats_service] = lambda: SimpleNamespace(
+            invalidate=lambda: None
+        )
         return TestClient(app)
 
     yield factory
 
     get_settings.cache_clear()
-    dependencies.get_triage_service.cache_clear()
     with engine.begin() as connection:
         connection.execute(text("TRUNCATE complaints"))
 

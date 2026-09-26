@@ -6,7 +6,7 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
-from app import dependencies, lifecycle
+from app import dependencies, lifecycle, resources
 from app.lifecycle import close_all, register_closer
 from app.main import create_app
 
@@ -116,9 +116,12 @@ def test_shutdown_still_completes_when_the_app_never_opened_a_resource() -> None
 
 @pytest.fixture
 def fresh_wiring() -> Iterator[None]:
-    dependencies.get_readiness_service.cache_clear()
+    caches = (dependencies.get_readiness_service, resources.get_engine, resources.get_cache)
+    for cached in caches:
+        cached.cache_clear()
     yield
-    dependencies.get_readiness_service.cache_clear()
+    for cached in caches:
+        cached.cache_clear()
 
 
 def test_the_readiness_wiring_registers_the_engine_and_the_redis_client(
@@ -130,19 +133,16 @@ def test_the_readiness_wiring_registers_the_engine_and_the_redis_client(
         def dispose(self) -> None:
             closed.append("engine")
 
-    class FakeClient:
-        def close(self) -> None:
-            closed.append("redis")
-
     class FakeCache:
-        _client = FakeClient()
-
         def __init__(self, url: str) -> None: ...
 
         def ping(self) -> None: ...
 
-    monkeypatch.setattr(dependencies, "create_db_engine", lambda url: FakeEngine())
-    monkeypatch.setattr(dependencies, "RedisCache", FakeCache)
+        def close(self) -> None:
+            closed.append("redis")
+
+    monkeypatch.setattr(resources, "create_db_engine", lambda url: FakeEngine())
+    monkeypatch.setattr(resources, "RedisCache", FakeCache)
 
     dependencies.get_readiness_service()
     assert closed == []
