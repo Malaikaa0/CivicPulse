@@ -4,9 +4,9 @@ A burst main reported by nine neighbours should cost one inference, not nine. Th
 of the provider name and the redacted, lower-cased, whitespace-collapsed text, so the same
 complaint typed with different casing, spacing or phone number shares an entry.
 
-Data protection (ADR-0004): the key is derived from the redacted text only, and what is stored is
-the validated TriageResult, never the complaint. `location` is not part of the key because the
-LLM never receives it.
+Data protection (ADR-0004): the key is derived from the redacted text only, and what is stored
+is the validated TriageResult with its summary redacted, never the complaint. `location` is not
+part of the key because the LLM never receives it.
 
 The cache is an optimisation and must never be a failure: a Redis outage, a slow Redis or a
 damaged entry all degrade to "ask the provider". Only successful results are stored; an error
@@ -30,6 +30,8 @@ logger = logging.getLogger(__name__)
 KEY_PREFIX = "triage:v1:"
 HITS_KEY = "triage:stats:hits"
 MISSES_KEY = "triage:stats:misses"
+
+MAX_SUMMARY_LENGTH = 140  # TriageResult.summary; redacting a very short email can lengthen it
 
 
 @dataclass(frozen=True)
@@ -121,9 +123,16 @@ class CachingTriage:
             logger.warning("ignoring unreadable triage cache entry")
             return None
 
+    @staticmethod
+    def _storable(result: TriageResult) -> TriageResult:
+        # A summary may quote the complaint (the rule-based provider does), and the next
+        # near-duplicate is handed this entry: it must not inherit the first reporter's number.
+        summary = redact_pii(result.summary)[:MAX_SUMMARY_LENGTH]
+        return result.model_copy(update={"summary": summary})
+
     def _remember(self, key: str, result: TriageResult) -> None:
         try:
-            self._store.set(key, result.model_dump_json(), self._ttl)
+            self._store.set(key, self._storable(result).model_dump_json(), self._ttl)
         except Exception:
             logger.warning("could not write triage cache entry")
 
