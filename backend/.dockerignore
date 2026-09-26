@@ -8,9 +8,11 @@ venv
 .env
 .env.*
 
-# Python caches and tooling output
-__pycache__
-*.pyc
+# Python caches and tooling output.
+# The **/ prefix matters: without it Docker only matches these at the context root, and
+# app/__pycache__ from the host would be copied into the image.
+**/__pycache__
+**/*.pyc
 .pytest_cache
 .mypy_cache
 .ruff_cache
