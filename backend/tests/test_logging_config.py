@@ -43,7 +43,9 @@ def isolated_logging() -> Iterator[None]:
 
 def _format(message: str = "hello", *args: object, **kwargs: object) -> dict[str, object]:
     logger = logging.getLogger("civicpulse.test")
-    record = logger.makeRecord(logger.name, logging.INFO, __file__, 1, message, args, None, **kwargs)
+    record = logger.makeRecord(
+        logger.name, logging.INFO, __file__, 1, message, args, None, **kwargs
+    )
     return json.loads(JsonFormatter().format(record))
 
 
@@ -183,8 +185,11 @@ def test_configure_logging_twice_does_not_duplicate_lines(
 
 
 def test_no_configured_logger_writes_to_a_file(isolated_logging: None) -> None:
-    # pytest puts its own (null) FileHandler on the root logger, so look at what we added.
-    before = list(logging.getLogger().handlers)
+    # pytest puts its own (null) FileHandler on the root logger, so look at what we added. An
+    # earlier create_app() may already have added ours, so start from a root without it.
+    root = logging.getLogger()
+    root.handlers[:] = [h for h in root.handlers if not isinstance(h, JsonStdoutHandler)]
+    before = list(root.handlers)
 
     configure_logging("INFO")
 
