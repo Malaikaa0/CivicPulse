@@ -6,6 +6,7 @@ The hard 10-second cap on each call belongs to the provider's HTTP client (it ow
 this service owns what happens after a call fails.
 """
 
+import logging
 import random
 import time
 from collections.abc import Callable
@@ -14,6 +15,8 @@ from dataclasses import dataclass
 from app.providers.triage.base import TriageProvider, TriageResult
 from app.providers.triage.errors import TriageError
 from app.providers.triage.rules import RuleBasedTriage
+
+logger = logging.getLogger(__name__)
 
 FALLBACK_NAME = "rules:fallback"
 
@@ -44,6 +47,7 @@ class TriageService:
         # random.random is fine here: jitter spreads retries out, it is not a security control.
         jitter: Callable[[], float] = random.random,  # noqa: S311
         clock: Callable[[], float] = time.perf_counter,
+        recorder: Callable[[TriageOutcome], None] | None = None,
     ) -> None:
         self._provider = provider
         self._fallback = fallback or RuleBasedTriage()
@@ -51,20 +55,32 @@ class TriageService:
         self._sleep = sleep
         self._jitter = jitter
         self._clock = clock
+        self._recorder = recorder
 
     def triage(self, text: str, location: str) -> TriageOutcome:
         started = self._clock()
         try:
             result = self._attempt_with_one_retry(text, location)
         except Exception as error:  # deliberately broad: any failure must degrade, not surface
-            return self._fall_back(text, location, started, error)
+            outcome = self._fall_back(text, location, started, error)
+        else:
+            outcome = TriageOutcome(
+                result=result,
+                triaged_by=_STORED_NAME.get(self._provider.name, self._provider.name),
+                latency_ms=self._elapsed_ms(started),
+                fallback=False,
+            )
 
-        return TriageOutcome(
-            result=result,
-            triaged_by=_STORED_NAME.get(self._provider.name, self._provider.name),
-            latency_ms=self._elapsed_ms(started),
-            fallback=False,
-        )
+        self._record(outcome)
+        return outcome
+
+    def _record(self, outcome: TriageOutcome) -> None:
+        if self._recorder is None:
+            return
+        try:
+            self._recorder(outcome)
+        except Exception as error:  # observability must never change what the citizen gets
+            logger.warning("triage outcome recorder failed: %s", type(error).__name__)
 
     def _attempt_with_one_retry(self, text: str, location: str) -> TriageResult:
         try:
