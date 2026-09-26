@@ -2,6 +2,7 @@
 
 import logging
 import uuid
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 import pytest
@@ -34,6 +35,7 @@ class FakeStore:
         self.commits = 0
         self.rollbacks = 0
         self.fail_on_add: Exception | None = None
+        self.fail_on_commit: Exception | None = None
         self.locked_reads: list[bool] = []
         self.last_search: tuple[ComplaintFilters, int, int] | None = None
 
@@ -64,6 +66,8 @@ class FakeStore:
 
     def commit(self) -> None:
         self.events.append("commit")
+        if self.fail_on_commit is not None:
+            raise self.fail_on_commit
         self.commits += 1
 
     def rollback(self) -> None:
@@ -237,3 +241,140 @@ def test_search_turns_page_and_size_into_limit_and_offset(
 
     assert store.last_search == (filters, size, offset)
     assert (result.page, result.page_size) == (page, size)
+
+
+# ---- on_write: called after a committed write, and only then ----
+
+
+class HookProbe:
+    """Records how many commits the store had seen each time the hook ran."""
+
+    def __init__(self, store: FakeStore) -> None:
+        self._store = store
+        self.commits_seen: list[int] = []
+
+    def __call__(self) -> None:
+        self.commits_seen.append(self._store.commits)
+
+
+def _broken_hook() -> None:
+    raise ConnectionError("redis is down")
+
+
+def _hooked_service(store: FakeStore, on_write: Callable[[], None]) -> ComplaintService:
+    triage = TriageService(SimulatedTriage(), sleep=lambda _: None, jitter=lambda: 0.0)
+    return ComplaintService(store, triage, on_write)
+
+
+def test_on_write_runs_once_after_the_commit_of_a_create() -> None:
+    store = FakeStore()
+    probe = HookProbe(store)
+
+    _hooked_service(store, probe).create(TEXT, "Street 12", None)
+
+    assert probe.commits_seen == [1]  # one call, and the commit had already happened
+
+
+def test_on_write_runs_once_after_the_commit_of_a_status_change() -> None:
+    store = FakeStore()
+    probe = HookProbe(store)
+    service = _hooked_service(store, probe)
+    created = service.create(TEXT, "Street 12", None)
+    probe.commits_seen.clear()
+
+    service.change_status(created.id, Status.IN_PROGRESS)
+
+    assert probe.commits_seen == [2]
+
+
+def test_on_write_is_not_called_when_the_create_fails_to_persist() -> None:
+    store = FakeStore()
+    store.fail_on_add = RuntimeError("database is down")
+    probe = HookProbe(store)
+
+    with pytest.raises(RuntimeError):
+        _hooked_service(store, probe).create(TEXT, "Street 12", None)
+
+    assert probe.commits_seen == []
+
+
+def test_on_write_is_not_called_when_the_commit_itself_fails() -> None:
+    store = FakeStore()
+    store.fail_on_commit = RuntimeError("commit failed")
+    probe = HookProbe(store)
+
+    with pytest.raises(RuntimeError, match="commit failed"):
+        _hooked_service(store, probe).create(TEXT, "Street 12", None)
+
+    assert probe.commits_seen == []
+    assert store.rollbacks == 1
+
+
+def test_on_write_is_not_called_for_an_invalid_transition_or_an_unknown_id() -> None:
+    store = FakeStore()
+    probe = HookProbe(store)
+    service = _hooked_service(store, probe)
+    created = service.create(TEXT, "Street 12", None)
+    probe.commits_seen.clear()
+
+    with pytest.raises(InvalidTransition):
+        service.change_status(created.id, Status.RESOLVED)
+    with pytest.raises(ComplaintNotFound):
+        service.change_status(uuid.uuid4(), Status.IN_PROGRESS)
+
+    assert probe.commits_seen == []
+
+
+def test_on_write_is_not_called_by_reads() -> None:
+    store = FakeStore()
+    probe = HookProbe(store)
+    service = _hooked_service(store, probe)
+    created = service.create(TEXT, "Street 12", None)
+    probe.commits_seen.clear()
+
+    service.get(created.id)
+    service.search(ComplaintFilters(), page=1, page_size=20)
+
+    assert probe.commits_seen == []
+
+
+def test_a_failing_hook_neither_fails_a_create_nor_undoes_it(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    store = FakeStore()
+
+    with caplog.at_level(logging.ERROR, logger="civicpulse.complaints"):
+        complaint = _hooked_service(store, _broken_hook).create(TEXT, "Street 12", None)
+
+    assert complaint.id in store.rows
+    assert store.commits == 1
+    assert store.rollbacks == 0
+    (record,) = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert record.exc_info is not None
+    assert isinstance(record.exc_info[1], ConnectionError)
+
+
+def test_a_failing_hook_neither_fails_a_status_change_nor_undoes_it() -> None:
+    store = FakeStore()
+    service = _hooked_service(store, _broken_hook)
+    created = service.create(TEXT, "Street 12", None)
+
+    updated = service.change_status(created.id, Status.IN_PROGRESS)
+
+    assert updated.status == Status.IN_PROGRESS
+    assert store.commits == 2
+    assert store.rollbacks == 0
+
+
+def test_a_failing_hook_does_not_swallow_the_fallback_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    triage = TriageService(
+        SimulatedTriage(always_fail=TriageTimeout()), sleep=lambda _: None, jitter=lambda: 0.0
+    )
+    service = ComplaintService(FakeStore(), triage, _broken_hook)
+
+    with caplog.at_level(logging.DEBUG, logger="civicpulse.complaints"):
+        service.create(TEXT, "Street 12", None)
+
+    assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == 1
