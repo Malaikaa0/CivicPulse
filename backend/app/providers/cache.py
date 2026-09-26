@@ -33,6 +33,10 @@ class RedisCache:
         """Raise if Redis cannot be reached."""
         self._client.ping()
 
+    def close(self) -> None:
+        """Release the connection pool. Called once, on shutdown."""
+        self._client.close()
+
     def get(self, key: str) -> str | None:
         value = self._client.get(key)
         return None if value is None else str(value)
