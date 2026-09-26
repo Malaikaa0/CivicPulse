@@ -1,0 +1,27 @@
+# Version control and virtualenvs
+.git
+.gitignore
+.venv
+venv
+
+# Secrets - must never be baked into an image
+.env
+.env.*
+
+# Python caches and tooling output
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+
+# Tests, dev dependencies and docs are not needed at runtime
+tests
+requirements-dev.in
+requirements-dev.txt
+requirements.in
+*.md
+Dockerfile
+.dockerignore
