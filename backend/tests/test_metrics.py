@@ -16,9 +16,9 @@ from app.services.triage import TriageOutcome, TriageService
 def _app() -> FastAPI:
     app = create_app()
 
-    @app.get("/api/complaints/{complaint_id}")
-    def one_complaint(complaint_id: uuid.UUID) -> dict[str, str]:
-        return {"id": str(complaint_id)}
+    @app.get("/probe/{probe_id}")
+    def probe(probe_id: uuid.UUID) -> dict[str, str]:
+        return {"id": str(probe_id)}
 
     return app
 
@@ -78,16 +78,16 @@ def test_a_path_parameter_is_labelled_by_its_template_not_its_value() -> None:
     app = _app()
     client = TestClient(app)
 
-    client.get(f"/api/complaints/{uuid.uuid4()}")
-    client.get(f"/api/complaints/{uuid.uuid4()}")
+    client.get(f"/probe/{uuid.uuid4()}")
+    client.get(f"/probe/{uuid.uuid4()}")
 
     metrics = _metrics(app)
-    assert _requests(metrics, "GET", "/api/complaints/{complaint_id}", 200) == 2
+    assert _requests(metrics, "GET", "/probe/{probe_id}", 200) == 2
     # Two different ids, one series: no label explosion.
     series = [
         line
         for line in metrics.render().decode().splitlines()
-        if line.startswith("http_requests_total{") and "/api/complaints/" in line
+        if line.startswith("http_requests_total{") and "/probe/" in line
     ]
     assert len(series) == 1
 
@@ -108,9 +108,11 @@ def test_the_status_code_is_a_label() -> None:
     app = _app()
     client = TestClient(app)
 
-    client.get("/api/complaints/not-a-uuid")
+    response = client.get("/probe/not-a-uuid")
 
-    assert _requests(_metrics(app), "GET", "/api/complaints/{complaint_id}", 422) == 1
+    # 400 once the API's validation handler is registered, 422 before it.
+    assert response.status_code in (400, 422)
+    assert _requests(_metrics(app), "GET", "/probe/{probe_id}", response.status_code) == 1
 
 
 def test_a_wrong_method_on_a_known_route_keeps_the_route_template() -> None:

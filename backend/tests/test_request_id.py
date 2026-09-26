@@ -64,9 +64,9 @@ def _app() -> FastAPI:
         test_logger.info("from sync handler")
         return {"seen": request_id_var.get()}
 
-    @app.get("/api/complaints/{complaint_id}")
-    def one_complaint(complaint_id: uuid.UUID) -> dict[str, str]:
-        return {"id": str(complaint_id)}
+    @app.get("/probe/{probe_id}")
+    def probe(probe_id: uuid.UUID) -> dict[str, str]:
+        return {"id": str(probe_id)}
 
     @app.get("/boom")
     def boom() -> None:
@@ -159,10 +159,12 @@ def test_a_newline_in_the_header_never_reaches_the_logs(logs: LogCapture) -> Non
 
 def test_the_request_id_is_echoed_on_error_responses(client: TestClient) -> None:
     missing = client.get("/no/such/route", headers={"X-Request-ID": "trace-1"})
-    invalid = client.get("/api/complaints/not-a-uuid", headers={"X-Request-ID": "trace-2"})
+    invalid = client.get("/probe/not-a-uuid", headers={"X-Request-ID": "trace-2"})
 
     assert (missing.status_code, missing.headers["X-Request-ID"]) == (404, "trace-1")
-    assert (invalid.status_code, invalid.headers["X-Request-ID"]) == (422, "trace-2")
+    # 400 once the API's validation handler is registered, 422 before it.
+    assert invalid.status_code in (400, 422)
+    assert invalid.headers["X-Request-ID"] == "trace-2"
 
 
 def test_log_lines_from_an_async_handler_carry_the_request_id(
@@ -229,12 +231,12 @@ def test_one_access_log_line_per_request_with_the_template_path(
 ) -> None:
     complaint_id = uuid.uuid4()
 
-    client.get(f"/api/complaints/{complaint_id}", headers={"X-Request-ID": "acc-1"})
+    client.get(f"/probe/{complaint_id}", headers={"X-Request-ID": "acc-1"})
 
     (line,) = logs.named("civicpulse.access")
     assert line["level"] == "INFO"
     assert line["method"] == "GET"
-    assert line["path"] == "/api/complaints/{complaint_id}"
+    assert line["path"] == "/probe/{probe_id}"
     assert line["status"] == 200
     assert isinstance(line["duration_ms"], float)
     assert line["duration_ms"] >= 0
