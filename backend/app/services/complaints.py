@@ -6,6 +6,7 @@ the database is touched, so a slow LLM call never holds a connection open.
 
 import logging
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -62,10 +63,21 @@ class ComplaintPage:
     page_size: int
 
 
+def _do_nothing() -> None:
+    return None
+
+
 class ComplaintService:
-    def __init__(self, store: ComplaintStore, triage: TriageService) -> None:
+    def __init__(
+        self,
+        store: ComplaintStore,
+        triage: TriageService,
+        # Called after every committed write, e.g. to invalidate cached statistics.
+        on_write: Callable[[], None] = _do_nothing,
+    ) -> None:
         self._store = store
         self._triage = triage
+        self._on_write = on_write
 
     def create(self, text: str, location: str, reporter_contact: str | None) -> Complaint:
         # 1. Triage first. It never raises: a failing provider degrades to the rule-based one.
@@ -87,6 +99,7 @@ class ComplaintService:
         except Exception:
             self._store.rollback()
             raise
+        self._notify_write()
 
         # 3. One WARNING per fallback. It is logged here, not in the triage service, because
         # only now does the complaint have an id.
@@ -127,4 +140,13 @@ class ComplaintService:
         except Exception:
             self._store.rollback()
             raise
+        self._notify_write()
         return complaint
+
+    def _notify_write(self) -> None:
+        # The write is already committed, so a failing hook must not turn it into a failed
+        # request (the client would retry and create a duplicate). Log it and carry on.
+        try:
+            self._on_write()
+        except Exception:
+            logger.exception("on_write hook failed after a committed write")
