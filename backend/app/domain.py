@@ -32,6 +32,7 @@ class Status(StrEnum):
 
 class TriagedBy(StrEnum):
     LLM_GROQ = "llm:groq"
+    LLM_GEMINI = "llm:gemini"
     LLM_OLLAMA = "llm:ollama"
     RULES = "rules"
     RULES_FALLBACK = "rules:fallback"
