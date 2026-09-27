@@ -1,0 +1,21 @@
+# Version control
+.git
+.gitignore
+
+# Dependencies and build output - installed/built fresh inside the image
+node_modules
+dist
+
+# Secrets - must never be baked into an image
+.env
+.env.*
+
+# Tests, tooling output and docs are not needed at runtime
+tests
+coverage
+*.md
+.eslintcache
+
+# Editors
+.vscode
+.idea
