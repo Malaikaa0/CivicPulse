@@ -98,9 +98,9 @@ Full interactive schema at `/docs` (Swagger UI) or `/openapi.json` once the back
 
 ## Screenshots
 
-Pending: the Submit, Dashboard and Stats views are not built yet (only the scaffold and a
-backend-connectivity landing page exist under `frontend/`). This section will be filled in once
-those views land, with real screenshots rather than placeholders.
+The Submit, Dashboard, and Stats views are built (`frontend/src/pages/`) - actual screenshots
+still need capturing against a running instance and are tracked as a follow-up rather than
+guessed at here.
 
 ## Repository layout
 
@@ -119,9 +119,11 @@ tested (backend: 655 tests against real PostgreSQL and Redis, 99%+ coverage). Ku
 complete and verified against a real cluster: namespace, StatefulSet+PVC for Postgres,
 Deployment+PVC for Redis, backend/frontend Deployments with all three probes correct, Ingress,
 PodDisruptionBudget, HPA and VPA (both proven with real load tests, not just applied - see
-`k8s/evidence/`), and dev/prod Kustomize overlays. CI/CD workflows and the frontend's real views
-(Submit/Dashboard/Stats) are in progress. See `docs/ENGINEERING-NOTES.md` for the honest state of
-what's pending and why, and `docs/AI-USAGE.md` for a specific account of how AI assistance was
+`k8s/evidence/`), and dev/prod Kustomize overlays. CI/CD (`ci.yml`/`cd.yml`/`release.yml`) is
+built and verified running for real on GitHub Actions. The frontend's real views
+(Submit/Dashboard/Stats) are built and tested (29 component tests). See
+`docs/ENGINEERING-NOTES.md` for the honest state of what's pending and why, and
+`docs/AI-USAGE.md` for a specific account of how AI assistance was
 used throughout.
 
 ## Documentation
