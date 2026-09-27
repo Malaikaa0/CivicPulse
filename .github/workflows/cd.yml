@@ -134,42 +134,52 @@ jobs:
       - name: Install VPA CRD
         run: kubectl apply -f https://raw.githubusercontent.com/kubernetes/autoscaler/vertical-pod-autoscaler-1.2.1/vertical-pod-autoscaler/deploy/vpa-v1-crd-gen.yaml
 
+      # Real secrets, from GitHub Secrets, written over the committed placeholder file in this
+      # runner's throwaway checkout *before* anything is applied - never committed anywhere
+      # (spec 3.4/5.3), and GitHub masks the values in logs.
+      #
+      # Before, not after: Postgres initialises its data directory with whatever
+      # POSTGRES_PASSWORD it sees on first start. Applying the placeholder first and patching the
+      # Secret afterwards raced that initialisation - Postgres could come up with the placeholder
+      # password while DATABASE_URL carried the real one, so every migrate attempt failed and
+      # backend's /ready (which checks the database) never passed. Written first, every pod sees
+      # the right value from the very first moment, and no restart is needed.
+      #
+      # DATABASE_URL is derived from POSTGRES_PASSWORD (URL-encoded) rather than taken from a
+      # second, separately-entered secret, so the two can never disagree.
+      - name: Write real secrets into this checkout (not committed)
+        env:
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          ENCODED=$(python3 -c "import os, urllib.parse; print(urllib.parse.quote(os.environ['POSTGRES_PASSWORD'], safe=''))")
+          kubectl create secret generic civicpulse-secrets -n civicpulse \
+            --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+            --from-literal=DATABASE_URL="postgresql+psycopg://civicpulse:${ENCODED}@postgres:5432/civicpulse" \
+            --from-literal=GEMINI_API_KEY="$GEMINI_API_KEY" \
+            --dry-run=client -o yaml > k8s/base/secret.yaml
+
       - name: Apply overlays/prod
         run: kubectl apply -k k8s/overlays/prod
 
-      # Real secrets, from GitHub Secrets, layered on top of the committed placeholders - never
-      # the other way around, and never committed anywhere (spec 3.4/5.3).
-      #
-      # No `rollout restart` here on purpose: this cluster is created fresh every run, so
-      # backend's pods are being scheduled for the very first time, not replacing already-running
-      # ones - a restart would force an unnecessary extra rolling-update surge (maxSurge: 1 means
-      # a third concurrent replica) on top of the two already starting. On a resource-constrained
-      # GitHub-hosted runner that third pod couldn't be scheduled at all: the very first version
-      # of this step *did* restart, and every real run timed out at "1 out of 2 new replicas have
-      # been updated" for exactly that reason. Patching the Secret's data here is enough - the
-      # kubelet reads secretKeyRef values when it actually starts each container (after
-      # scheduling and image pull), which reliably happens after this step returns.
-      - name: Inject real secrets
+      - name: Wait for migrations, then rollout
         run: |
-          kubectl -n civicpulse create secret generic civicpulse-secrets \
-            --from-literal=POSTGRES_PASSWORD="${{ secrets.POSTGRES_PASSWORD }}" \
-            --from-literal=DATABASE_URL="${{ secrets.DATABASE_URL }}" \
-            --from-literal=GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}" \
-            --dry-run=client -o yaml | kubectl apply -f -
-
-      - name: Wait for rollout
-        run: |
+          kubectl -n civicpulse rollout status statefulset/postgres --timeout=180s
+          kubectl -n civicpulse wait --for=condition=complete job/migrate --timeout=180s
           kubectl -n civicpulse rollout status deployment/backend --timeout=180s
           kubectl -n civicpulse rollout status deployment/frontend --timeout=180s
-          kubectl -n civicpulse rollout status statefulset/postgres --timeout=180s
 
       - name: Diagnostics on failure
         if: failure()
         run: |
           kubectl -n civicpulse get pods -o wide
-          kubectl -n civicpulse describe pods
           kubectl -n civicpulse get events --sort-by=.lastTimestamp
-          kubectl -n civicpulse top pods || true
+          echo "=== migrate job logs ==="
+          kubectl -n civicpulse logs job/migrate --tail=60 || true
+          echo "=== backend logs ==="
+          kubectl -n civicpulse logs -l app=backend --tail=60 --prefix || true
+          echo "=== postgres logs ==="
+          kubectl -n civicpulse logs statefulset/postgres --tail=40 || true
 
       # Through the Ingress, exactly like a real user - not a Service ClusterIP shortcut. Only
       # hits /health and / (liveness-level checks): a real triage call through overlays/prod's
