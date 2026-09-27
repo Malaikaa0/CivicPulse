@@ -57,13 +57,15 @@ spec:
             storage: 1Gi
 ---
 # Headless, matching the StatefulSet's serviceName - gives postgres-0 a stable DNS name and is
-# what StatefulSet networking expects. clusterIP: None, never NodePort/LoadBalancer.
+# what StatefulSet networking expects. type: ClusterIP + clusterIP: None (a headless Service is
+# still a ClusterIP Service, just without a virtual IP) - never NodePort/LoadBalancer.
 apiVersion: v1
 kind: Service
 metadata:
   name: postgres
   namespace: civicpulse
 spec:
+  type: ClusterIP
   clusterIP: None
   selector:
     app: postgres

@@ -1,0 +1,64 @@
+# Stateless: no volumes, no env beyond what the image already bakes in. The frontend never
+# gets postgres/redis/LLM config (or any Secret) - ADR-0002: it only ever talks to nginx's own
+# /api proxy, which forwards to the backend Service by name, same as compose.yaml's edge network.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: civicpulse
+spec:
+  replicas: 2
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: frontend
+          image: ghcr.io/malaikaa0/civicpulse-frontend:latest # overridden per-environment by overlays
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "5"]
+          startupProbe:
+            httpGet: { path: /, port: 8080 }
+            failureThreshold: 30
+            periodSeconds: 2
+          # Unlike the backend, liveness and readiness hit the same path on purpose: nginx here
+          # serves only static files and its own /api proxy - there is no database dependency to
+          # differentiate readiness from liveness against, so both just confirm nginx itself is
+          # answering.
+          livenessProbe:
+            httpGet: { path: /, port: 8080 }
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /, port: 8080 }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: "100m", memory: "64Mi" }
+            limits: { cpu: "250m", memory: "128Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: civicpulse
+spec:
+  type: ClusterIP
+  selector:
+    app: frontend
+  ports:
+    - port: 8080
+      targetPort: 8080

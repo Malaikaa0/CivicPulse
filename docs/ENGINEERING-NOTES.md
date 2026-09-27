@@ -1,9 +1,13 @@
 # Engineering Notes
 
-Answers to spec section 5.2. Four questions (2, 5, 6, 7) need infrastructure that does not exist
-yet — Kubernetes, CI/CD, and Docker network segmentation are M2's half of the work — and are
-marked **PENDING** rather than guessed at. The other four are answered from what is actually built
-and tested today.
+Answers to spec section 5.2. Question 2 (CI/CD maturity ladder) still needs infrastructure that
+does not exist yet — no `.github/workflows/*.yml` — and is marked **PENDING** rather than guessed
+at. Question 7 is marked PENDING below for the same reason it originally was, but note that
+`compose.yaml` referenced there now exists; that answer needs revisiting rather than left as
+written. Questions 5 (HPA lag) and 6 (VPA/HPA conflict) were PENDING for the same kind of reason —
+no Kubernetes manifests existed to measure against — until the HPA, VPA, and real load tests below
+existed; both are now answered from that measurement. The rest are answered from what is actually
+built and tested today.
 
 ---
 
@@ -58,9 +62,15 @@ Kubernetes — only the environment differs. **What breaks without it:** the ima
 accident in whichever environment matches the hard-coded default and fail silently or connect to
 the wrong database everywhere else — the definition of *not* build-once-deploy-many.
 
-**Frontend side: PENDING.** ADR-0002 records the decision (nginx proxies `/api`, so the frontend
-never bakes in a backend URL) but the frontend does not exist yet, so there is no line in a built
-image to cite. To complete once the frontend is built: the `nginx.conf` proxy directive.
+**Frontend side.** ADR-0002 records the decision (nginx proxies `/api`, so the frontend never
+bakes in a backend URL); the line that keeps it true is
+[`frontend/nginx.conf:25-36`](../frontend/nginx.conf#L25-L36). The upstream is a variable
+(`set $backend "http://backend:8000"; proxy_pass $backend;`), resolved lazily per request via
+`resolver 127.0.0.11 valid=10s`, not a hard-coded `proxy_pass http://backend:8000` baked in at
+build time. The same built image runs against Compose's `backend` service and Kubernetes'
+`backend` Service without a rebuild or a `/config.js` — both environments just need a DNS name
+called `backend` to resolve, which is exactly what each platform's own service discovery gives it
+for free.
 
 ## 4. Determinism with a probabilistic LLM
 
@@ -92,30 +102,101 @@ yields a result with `triaged_by == "rules:fallback"` — proven at the unit lev
 (`test_triage_service.py`), at the HTTP level (`test_complaint_routes.py`, parametrised over all
 five `TriageError` types), and against a real database (`test_complaints_db.py`).
 
-## 5. HPA lag — **PENDING**
+## 5. HPA lag
 
-No Kubernetes manifests exist yet (M2's half). This needs a real `kubectl get hpa -w` capture
-during a load test, which needs the cluster, the HPA, and `metrics-server` to exist first.
+Measured against a real k3d cluster with `backend-hpa` (`k8s/base/hpa.yaml`) and a k6 load
+test ramping to 40 VUs against `GET /api/complaints`; the full capture is
+[`k8s/evidence/hpa-watch.txt`](../k8s/evidence/hpa-watch.txt) and
+[`k8s/evidence/k6-load-test-output.txt`](../k8s/evidence/k6-load-test-output.txt).
 
-## 6. Why VPA is in Off mode — **PENDING**
+`hpa-watch.txt` timestamps are `kubectl get hpa`'s own AGE column, i.e. seconds since the HPA
+object was created, not seconds since the k6 test started - the two clocks were aligned by
+comparing the HPA's reported AGE against k6's own elapsed-time counter in the same terminal check
+partway through the run (AGE 4m27s alongside k6's own "running (1m58.0s)"), giving a fixed ~149s
+offset used for every "t=" figure below.
 
-Same blocker as question 5: no VPA is deployed yet. The reasoning (VPA raising a pod's CPU request
-lowers computed utilisation, which makes the HPA scale in, which raises per-pod load, which makes
-VPA raise the request again — a feedback loop between the two autoscalers acting on the same
-signal) can be stated in the abstract, but the spec asks for *this system's* failure mode, which
-needs the two actually running together at least once to describe honestly.
+Offered load finished ramping to its full 40 VUs at approximately t=30s into the test. CPU
+utilization was still at 20% at the previous fifteen-second sample and had jumped to 101% by
+t=31s; by the next sample, at t=46s, `kubectl get hpa` already showed 4 replicas. That ~15-second
+window is almost entirely the HorizontalPodAutoscaler controller's own sync period (15s by
+default, not something this HPA object configures) — `behavior.scaleUp.stabilizationWindowSeconds:
+0` in the manifest means Kubernetes adds no deliberate delay of its own on top of that. The new
+pods were created in the same window and were already `1/1 Ready` well before the next check
+(~87s later), which is mostly container start (the images were already resident on both nodes,
+so there was no pull to wait on) plus the `startupProbe`'s 2-second check interval — a small
+fraction of the total lag compared to the controller's sync period. Call it roughly 15-20 seconds
+from full load to a scaling decision, and a further single-digit number of seconds for that
+capacity to actually be Ready and serving. During that whole window the original 2 replicas
+absorbed the entire burst alone: p95 latency degraded to 3.49s (`k6-load-test-output.txt`) against
+a normal sub-second baseline, but 0 of 3900 requests failed — the system slowed down under
+pressure rather than falling over, which is the outcome the readiness probe and the HPA's request-
+based denominator are there to produce. Shrinking this lag further would mean lowering the
+cluster's HPA sync period (out of scope for a namespaced HPA object) or raising `minReplicas`
+above what steady-state traffic needs — which is just capacity planning wearing a different hat,
+and exactly the trade-off autoscaling cannot avoid.
 
-## 7. `internal: true` and the hosted LLM — **PENDING**
+## 6. Why VPA is in Off mode
 
-No `compose.yaml` exists yet (M2's half), so there is no `internal: true` network to describe the
-consequence of. The constraint is already visible in the code, though: `LLMTriage` needs outbound
-internet access to reach `generativelanguage.googleapis.com`
+Ran the full loop against a real k3d cluster with the official Vertical Pod Autoscaler installed
+(recommender, updater, admission-controller — `updateMode: "Off"` on `backend-vpa`,
+[`k8s/base/vpa.yaml`](../k8s/base/vpa.yaml)):
+
+1. **Recorded the guessed requests**: `cpu: 250m, memory: 256Mi` (the values `backend.yaml` shipped
+   with before this exercise).
+2. **Ran the load test** (the same k6 ramp used for question 5).
+3. **`kubectl describe vpa backend-vpa`** — full output in
+   [`k8s/evidence/vpa-recommendation.txt`](../k8s/evidence/vpa-recommendation.txt): `Target: cpu:
+   587m, memory: 262144k`. Memory was already almost exactly right; CPU was under-provisioned by
+   more than 2x for this load pattern.
+4. **Updated `backend.yaml`'s requests to `cpu: 600m`** (limits raised to `1` core to keep headroom
+   above the new request) — memory left at `256Mi`.
+5. **Re-ran the same load test against the updated Deployment and reported what changed about HPA
+   behaviour** — this is the interesting part, and it's the feedback loop the spec warns about,
+   caught in the act rather than just described:
+
+   | | requests.cpu: 250m (before) | requests.cpu: 600m (after) |
+   |---|---|---|
+   | Peak reported utilisation | 101%/60% (`k8s/evidence/hpa-watch.txt`) | 84%/60% (`k8s/evidence/hpa-watch-after-vpa-update.txt`) |
+   | Peak replicas for the *same* offered load | 4 | 3 |
+
+   The real CPU the backend burned under identical traffic didn't change — only the denominator
+   did. A bigger request makes the exact same usage read as a smaller percentage, so the HPA
+   scaled less aggressively for equal load. That is precisely the mechanism the spec's warning
+   describes: if VPA had been running in **Auto** mode instead of Off, it would have pushed
+   `backend.yaml`'s request up right after step 3's measurement, which — as just demonstrated —
+   lowers computed utilisation on its own, which tells the HPA to scale *in*, which raises
+   per-pod load on the smaller replica count, which pushes VPA's next recommendation back up
+   again. Two controllers, one signal (CPU), each reacting to a number the other one just moved.
+   Recommender-only mode breaks the loop at the one point that can't fight back: `kubectl describe
+   vpa` produces a number, a person reads it and decides whether the trade-off (more headroom per
+   pod vs. a less sensitive autoscaler) is worth taking, and only then does a new commit change
+   `resources.requests`. The record→test→describe→update→retest loop above *is* that human
+   decision, made once, on purpose, instead of continuously and automatically.
+
+## 7. `internal: true` and the hosted LLM
+
+`LLMTriage` needs outbound internet access to reach `generativelanguage.googleapis.com`
 ([`backend/app/providers/triage/factory.py:11`](../backend/app/providers/triage/factory.py#L11)),
-so whichever network the backend container joins in the final Compose file cannot be `internal:
-true` on its own — the backend must bridge an external-facing network as well as the internal one,
-or the LLM path silently degrades to `rules:fallback` on every request (which would be a real,
-observable symptom via `/api/meta/providers`, not a crash). The actual network topology and which
-lines enforce it are for M2 to write once Compose exists.
+so the backend cannot live on an `internal: true` network alone. `compose.yaml` gives it two
+networks instead of one:
+
+```yaml
+backend:
+  networks: [edge, internal]   # the only service that bridges both
+```
+
+(`compose.yaml:95`, mirrored in `compose.prod.yaml`). `edge` is a plain bridge network (reaches
+the outside world, including Gemini's API), `internal` is `internal: true` (no route out at all).
+`postgres` and `redis` are `internal`-only — they can talk to `backend`, `backend` can talk out
+through `edge`, and `frontend` (which only joins `edge`) can reach neither database directly.
+`backend` sitting on both networks is not a shortcut around the segmentation requirement; it is
+the segmentation requirement, applied correctly: the one service that legitimately needs both
+kinds of access is the one service allowed to have both, and everything that doesn't need outbound
+access (postgres, redis) is denied it by construction, not by convention. If `backend` were
+`internal`-only instead, the LLM path would not crash — it would silently degrade to
+`rules:fallback` on every single request (a real, observable symptom via `GET
+/api/meta/providers`, not an exception), which is exactly the kind of quiet, hard-to-notice
+failure question 8 below is about.
 
 ## 8. The failure
 
