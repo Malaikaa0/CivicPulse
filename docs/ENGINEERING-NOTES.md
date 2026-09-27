@@ -152,3 +152,52 @@ warning) and made configurable via `GEMINI_MODEL`
 too well is itself a monitoring gap — `triaged_by` and `/api/meta/providers` exist precisely so a
 permanently failing provider is *visible*, not just survivable, and checking them needs to be the
 first debugging step, not an afterthought.
+
+---
+
+## Design justifications the rubric asks for outside the 8 questions above
+
+**D3 — why these two indexes, and which query each serves.** Both are declared in the migration,
+with the query named at the point of definition rather than as an afterthought:
+[`backend/alembic/versions/0001_create_complaints.py:75-77`](../backend/alembic/versions/0001_create_complaints.py#L75-L77)
+justifies `ix_complaints_status_priority` ("Serves the dashboard list: `WHERE status = ?
+[AND priority = ?]`. status leads, so status-only filters use it too") and
+[`:79-81`](../backend/alembic/versions/0001_create_complaints.py#L79-L81) justifies
+`ix_complaints_created_at` ("Serves `ORDER BY created_at DESC LIMIT n OFFSET m`, the newest-first
+pagination of the dashboard"). An index that serves no named query in this system was deliberately
+not added — the spec calls an unexplained index "cargo cult," and the two here are the only two
+access patterns the dashboard actually has.
+
+**E1/E2 — why the stats cache needs both a TTL and explicit invalidation.** Answered in full in
+the module's own docstring,
+[`backend/app/services/stats.py:1-9`](../backend/app/services/stats.py#L1-L9): invalidation alone
+can fail (Redis unreachable at that instant), be missed by a write path added later, or lose a
+race against a concurrent read; a TTL alone means a fresh complaint is invisible in the stats for
+up to 30 seconds, which the spec rules out directly. Invalidation handles the common case
+immediately; the TTL is the backstop for when it does not fire. `ComplaintService`'s `on_write`
+hook (wired in `feat/backend-integration`, PR #39) is what actually calls `StatsService.invalidate()`
+after every committed write.
+
+**E3 — why the rate limiter has to live in Redis, not in the process.** Stated at the top of
+[`backend/app/services/rate_limit.py:3-4`](../backend/app/services/rate_limit.py#L3-L4): "The
+counter lives in Redis, not in this process. With the backend autoscaled to N pods, a per-pod
+counter would let one client send N times the limit (each pod sees only its share)." This is the
+same reasoning the spec gives directly (§2.4): the moment the HPA scales the backend to four pods,
+an in-process limiter would permit four times the intended traffic, because each pod would count
+its own quarter of the requests against its own separate limit. The atomic INCR+PTTL+PEXPIRE Lua
+script in [`backend/app/providers/cache.py:7-11`](../backend/app/providers/cache.py#L7-L11) exists
+for the same distributed reason at a smaller scale: two separate Redis commands (INCR, then
+EXPIRE) are not atomic across two pods issuing them concurrently, and a process dying between the
+two would leave a counter key with no expiry, permanently blocking that client.
+
+**E4 — Redis AOF on a named volume, and why a cache needs persistence at all — PENDING.** This
+needs `compose.yaml` to exist (the volume declaration is M2's). The honest answer to "why does a
+cache need persistence when the whole point of a cache is that it can be rebuilt" has two sides,
+and the actual configuration should state which one this system picked: (a) the stats cache and
+the rate-limiter counters truly can be rebuilt from PostgreSQL and from a clean slate respectively,
+so AOF buys only a faster warm-up after a restart, or (b) the 24-hour content-hash triage cache
+represents real (if reproducible) work — losing it after a Redis restart means the next instance
+of every duplicate complaint costs a fresh inference again, which is the exact cost the cache
+exists to avoid. Argument (b) is the stronger one given what this Redis instance actually stores,
+but it should be confirmed once the volume is configured and can be tested by restarting the
+container and checking the cache survives.
