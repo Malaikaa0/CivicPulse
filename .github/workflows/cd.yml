@@ -126,6 +126,14 @@ jobs:
       - name: Create ephemeral cluster
         run: k3d cluster create cd-smoke --agents 1 --wait
 
+      # A fresh cluster has no VerticalPodAutoscaler CRD - only the CRD, not the full
+      # recommender/updater/admission-controller stack: this smoke test's job is proving the
+      # Deployments/Ingress/HPA/rollout work, not re-exercising VPA's recommender loop (already
+      # proven for real locally - see k8s/evidence/). Without this, `kubectl apply -k` fails on
+      # backend-vpa with "no matches for kind VerticalPodAutoscaler".
+      - name: Install VPA CRD
+        run: kubectl apply -f https://raw.githubusercontent.com/kubernetes/autoscaler/vertical-pod-autoscaler-1.2.1/vertical-pod-autoscaler/deploy/vpa-v1-crd-gen.yaml
+
       - name: Apply overlays/prod
         run: kubectl apply -k k8s/overlays/prod
 
