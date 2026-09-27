@@ -12,6 +12,9 @@ Dockerfiles and imported into the cluster - not a simulation.
   180s, ramped back to 0 over 30s). Final summary: 3900 requests, **0 failed** (0.00%), p95
   latency 3.49s at the peak of the burst (baseline is well under 1s) - the two original replicas
   degraded gracefully rather than dropping requests while the HPA reacted.
+- **`hpa-replicas-vs-load.svg`** - replicas vs. offered load (VUs) over time, plotted directly
+  from the two files above (every data point in it is a real observation, not illustrative). CPU%
+  is included as a thin reference line. Open it in a browser or image viewer.
 
 See [`docs/ENGINEERING-NOTES.md`](../../docs/ENGINEERING-NOTES.md) question 5 for the
 lag analysis these logs support.
