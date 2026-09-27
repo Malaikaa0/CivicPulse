@@ -15,8 +15,20 @@ with `IMAGE_TAG` in `.env` set to a specific commit SHA (never `latest` - see
 with no source bind-mount and no `--reload`. `migrate` runs `alembic upgrade head` once,
 idempotently, before `backend` starts.
 
-**Kubernetes:** not built yet. This section will be filled in with `kubectl apply -k
-k8s/overlays/prod` and the rollout-status check once the manifests exist.
+**Kubernetes:**
+```
+kustomize build k8s/overlays/prod | kubeconform -strict -ignore-missing-schemas
+kubectl apply -k k8s/overlays/prod
+kubectl -n civicpulse rollout status deployment/backend
+kubectl -n civicpulse rollout status deployment/frontend
+```
+`overlays/prod` pins both images to the release commit SHA (set by the CD job via `kustomize edit
+set image`, never `:latest` - same reasoning as the Compose path) and switches
+`TRIAGE_PROVIDER` to `llm`. The one-shot `migrate` Job (`k8s/base/migrate-job.yaml`) must
+complete before `backend` will pass its readiness probe against a fresh database; check with
+`kubectl -n civicpulse get job migrate`. `rollout status` blocks until every new pod is Ready
+under the `maxSurge: 1, maxUnavailable: 0` strategy, so a deploy is over exactly when the command
+returns - it never leaves you guessing.
 
 ## Rolling back
 
@@ -28,9 +40,21 @@ This is the declarative, auditable rollback - `git show <previous-sha>` tells yo
 is running. Data is unaffected: `pgdata` and `redisdata` are named volumes, untouched by
 `docker compose down` (without `-v`) or by which image tag is deployed.
 
-**Kubernetes:** not built yet. Will document both `kubectl rollout undo` (fast, imperative) and
-re-applying the previous overlay with the previous SHA (declarative, auditable) once the
-manifests and `cd.yml` exist.
+**Kubernetes:** two options, same trade-off as always between fast/imperative and
+slow/auditable:
+```
+kubectl -n civicpulse rollout undo deployment/backend      # fast, imperative
+kubectl -n civicpulse rollout history deployment/backend   # see revisions first, if unsure
+```
+or, declaratively (preferred - the git history is the record of what changed, not the cluster's
+own rollout history, which is lost if the Deployment is ever deleted and recreated):
+```
+kustomize edit set image ghcr.io/malaikaa0/civicpulse-backend=ghcr.io/malaikaa0/civicpulse-backend:<previous-sha>
+kubectl apply -k k8s/overlays/prod
+```
+Either way, `postgres` and `redis` are untouched by a backend/frontend rollback - they're a
+StatefulSet and a Deployment with their own PVCs, never rolled back alongside the stateless
+tiers, and `pgdata`/`redisdata` survive regardless of which image tag is running.
 
 ## Reading logs
 

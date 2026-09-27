@@ -36,6 +36,10 @@ spec:
             httpGet: { path: /, port: 8080 }
             failureThreshold: 30
             periodSeconds: 2
+          # Unlike the backend, liveness and readiness hit the same path on purpose: nginx here
+          # serves only static files and its own /api proxy - there is no database dependency to
+          # differentiate readiness from liveness against, so both just confirm nginx itself is
+          # answering.
           livenessProbe:
             httpGet: { path: /, port: 8080 }
             periodSeconds: 10

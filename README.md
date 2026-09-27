@@ -107,7 +107,7 @@ those views land, with real screenshots rather than placeholders.
 ```
 backend/    FastAPI app: routes/services/repositories/providers, Alembic migrations, tests
 frontend/   React + Vite + TypeScript, served by nginx
-k8s/        Kubernetes manifests (in progress)
+k8s/        Kubernetes manifests: base + dev/prod overlays, HPA/VPA, load-test evidence
 docs/       ADRs, engineering notes, AI usage disclosure, runbook, evidence screenshots
 scripts/    check_submission.py, the pre-submission lint
 ```
@@ -115,10 +115,14 @@ scripts/    check_submission.py, the pre-submission lint
 ## Status
 
 Backend, AI layer, data layer, cache layer, and the dev/prod Compose stacks are complete and
-tested (backend: 655 tests against real PostgreSQL and Redis, 99%+ coverage). Kubernetes
-manifests, CI/CD workflows, and the frontend's real views are in progress. See
-`docs/ENGINEERING-NOTES.md` for the honest state of what's pending and why, and
-`docs/AI-USAGE.md` for a specific account of how AI assistance was used throughout.
+tested (backend: 655 tests against real PostgreSQL and Redis, 99%+ coverage). Kubernetes is
+complete and verified against a real cluster: namespace, StatefulSet+PVC for Postgres,
+Deployment+PVC for Redis, backend/frontend Deployments with all three probes correct, Ingress,
+PodDisruptionBudget, HPA and VPA (both proven with real load tests, not just applied - see
+`k8s/evidence/`), and dev/prod Kustomize overlays. CI/CD workflows and the frontend's real views
+(Submit/Dashboard/Stats) are in progress. See `docs/ENGINEERING-NOTES.md` for the honest state of
+what's pending and why, and `docs/AI-USAGE.md` for a specific account of how AI assistance was
+used throughout.
 
 ## Documentation
 

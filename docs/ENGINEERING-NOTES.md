@@ -62,9 +62,15 @@ Kubernetes — only the environment differs. **What breaks without it:** the ima
 accident in whichever environment matches the hard-coded default and fail silently or connect to
 the wrong database everywhere else — the definition of *not* build-once-deploy-many.
 
-**Frontend side: PENDING.** ADR-0002 records the decision (nginx proxies `/api`, so the frontend
-never bakes in a backend URL) but the frontend does not exist yet, so there is no line in a built
-image to cite. To complete once the frontend is built: the `nginx.conf` proxy directive.
+**Frontend side.** ADR-0002 records the decision (nginx proxies `/api`, so the frontend never
+bakes in a backend URL); the line that keeps it true is
+[`frontend/nginx.conf:25-36`](../frontend/nginx.conf#L25-L36). The upstream is a variable
+(`set $backend "http://backend:8000"; proxy_pass $backend;`), resolved lazily per request via
+`resolver 127.0.0.11 valid=10s`, not a hard-coded `proxy_pass http://backend:8000` baked in at
+build time. The same built image runs against Compose's `backend` service and Kubernetes'
+`backend` Service without a rebuild or a `/config.js` — both environments just need a DNS name
+called `backend` to resolve, which is exactly what each platform's own service discovery gives it
+for free.
 
 ## 4. Determinism with a probabilistic LLM
 
@@ -102,6 +108,12 @@ Measured against a real k3d cluster with `backend-hpa` (`k8s/base/hpa.yaml`) and
 test ramping to 40 VUs against `GET /api/complaints`; the full capture is
 [`k8s/evidence/hpa-watch.txt`](../k8s/evidence/hpa-watch.txt) and
 [`k8s/evidence/k6-load-test-output.txt`](../k8s/evidence/k6-load-test-output.txt).
+
+`hpa-watch.txt` timestamps are `kubectl get hpa`'s own AGE column, i.e. seconds since the HPA
+object was created, not seconds since the k6 test started - the two clocks were aligned by
+comparing the HPA's reported AGE against k6's own elapsed-time counter in the same terminal check
+partway through the run (AGE 4m27s alongside k6's own "running (1m58.0s)"), giving a fixed ~149s
+offset used for every "t=" figure below.
 
 Offered load finished ramping to its full 40 VUs at approximately t=30s into the test. CPU
 utilization was still at 20% at the previous fifteen-second sample and had jumped to 101% by
@@ -161,17 +173,30 @@ Ran the full loop against a real k3d cluster with the official Vertical Pod Auto
    `resources.requests`. The record→test→describe→update→retest loop above *is* that human
    decision, made once, on purpose, instead of continuously and automatically.
 
-## 7. `internal: true` and the hosted LLM — **PENDING**
+## 7. `internal: true` and the hosted LLM
 
-No `compose.yaml` exists yet (M2's half), so there is no `internal: true` network to describe the
-consequence of. The constraint is already visible in the code, though: `LLMTriage` needs outbound
-internet access to reach `generativelanguage.googleapis.com`
+`LLMTriage` needs outbound internet access to reach `generativelanguage.googleapis.com`
 ([`backend/app/providers/triage/factory.py:11`](../backend/app/providers/triage/factory.py#L11)),
-so whichever network the backend container joins in the final Compose file cannot be `internal:
-true` on its own — the backend must bridge an external-facing network as well as the internal one,
-or the LLM path silently degrades to `rules:fallback` on every request (which would be a real,
-observable symptom via `/api/meta/providers`, not a crash). The actual network topology and which
-lines enforce it are for M2 to write once Compose exists.
+so the backend cannot live on an `internal: true` network alone. `compose.yaml` gives it two
+networks instead of one:
+
+```yaml
+backend:
+  networks: [edge, internal]   # the only service that bridges both
+```
+
+(`compose.yaml:95`, mirrored in `compose.prod.yaml`). `edge` is a plain bridge network (reaches
+the outside world, including Gemini's API), `internal` is `internal: true` (no route out at all).
+`postgres` and `redis` are `internal`-only — they can talk to `backend`, `backend` can talk out
+through `edge`, and `frontend` (which only joins `edge`) can reach neither database directly.
+`backend` sitting on both networks is not a shortcut around the segmentation requirement; it is
+the segmentation requirement, applied correctly: the one service that legitimately needs both
+kinds of access is the one service allowed to have both, and everything that doesn't need outbound
+access (postgres, redis) is denied it by construction, not by convention. If `backend` were
+`internal`-only instead, the LLM path would not crash — it would silently degrade to
+`rules:fallback` on every single request (a real, observable symptom via `GET
+/api/meta/providers`, not an exception), which is exactly the kind of quiet, hard-to-notice
+failure question 8 below is about.
 
 ## 8. The failure
 

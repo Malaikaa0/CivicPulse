@@ -7,7 +7,7 @@
 
 
      execution: local
-        script: C:/Users/dell/AppData/Local/Temp/claude/c--Users-dell-OneDrive-Desktop-CivicPulse/1796c1f8-5313-4f8c-9330-0688dafc4dab/scratchpad/hpa-load.js
+        script: ./hpa-load.js  [path redacted - local tooling temp dir, not relevant to the result]
         output: -
 
      scenarios: (100.00%) 1 scenario, 40 max VUs, 4m30s max duration (incl. graceful stop):

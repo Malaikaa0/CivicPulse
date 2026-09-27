@@ -7,7 +7,7 @@
 
 
      execution: local
-        script: C:/Users/dell/AppData/Local/Temp/claude/c--Users-dell-OneDrive-Desktop-CivicPulse/1796c1f8-5313-4f8c-9330-0688dafc4dab/scratchpad/vpa-after-load.js
+        script: ./vpa-after-load.js  [path redacted - local tooling temp dir, not relevant to the result]
         output: -
 
      scenarios: (100.00%) 1 scenario, 40 max VUs, 3m0s max duration (incl. graceful stop):
