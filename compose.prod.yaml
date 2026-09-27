@@ -1,0 +1,126 @@
+# Deployable counterpart to compose.yaml. No build: key anywhere - every service runs an
+# already-built, already-scanned image, addressed by an immutable ${IMAGE_TAG} (a commit SHA;
+# see ADR-0003). "docker compose -f compose.prod.yaml up -d" is what a deploy step runs.
+#
+# Everything specific to development is gone: no bind mount, no --reload, no seed job (a
+# production system should not auto-insert demo complaints), no published database or cache
+# port (spec 5.3: an automatic deduction on its own, and also unreachable anyway - see
+# compose.yaml's comment on internal: true).
+networks:
+  edge:
+    driver: bridge
+  internal:
+    driver: bridge
+    internal: true
+
+volumes:
+  pgdata:
+  redisdata:
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    networks: [internal]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 512M }
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    networks: [internal]
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 256M }
+
+  # One-shot: brings the schema to head, then exits. Idempotent - safe to run on every deploy,
+  # not only the first. A real deploy runs this deliberately, unlike a startup-time CREATE
+  # TABLE, which is what spec 2.3 explicitly rules out.
+  migrate:
+    image: ghcr.io/malaikaa0/civicpulse-backend:${IMAGE_TAG}
+    networks: [internal]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+
+  backend:
+    image: ghcr.io/malaikaa0/civicpulse-backend:${IMAGE_TAG}
+    restart: unless-stopped
+    networks: [edge, internal]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      TRIAGE_PROVIDER: ${TRIAGE_PROVIDER}
+      TRIAGE_TIMEOUT_SECONDS: ${TRIAGE_TIMEOUT_SECONDS}
+      TRIAGE_CACHE_TTL_SECONDS: ${TRIAGE_CACHE_TTL_SECONDS}
+      LLM_VENDOR: ${LLM_VENDOR}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-}
+      STATS_CACHE_TTL_SECONDS: ${STATS_CACHE_TTL_SECONDS}
+      RATE_LIMIT_REQUESTS: ${RATE_LIMIT_REQUESTS}
+      RATE_LIMIT_WINDOW_SECONDS: ${RATE_LIMIT_WINDOW_SECONDS}
+      TRUST_FORWARDED_FOR: ${TRUST_FORWARDED_FOR}
+      LOG_LEVEL: ${LOG_LEVEL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    # No volumes:, no command: override - this runs the image exactly as built (its own
+    # Dockerfile CMD), not a live mount of whatever the deploying machine's working tree has.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits: { cpus: "1.0", memory: 512M }
+
+  frontend:
+    image: ghcr.io/malaikaa0/civicpulse-frontend:${IMAGE_TAG}
+    restart: unless-stopped
+    networks: [edge]
+    ports:
+      - "3000:8080" # the one deliberately public entry point; postgres/redis have none
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 128M }
