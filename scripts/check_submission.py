@@ -243,15 +243,26 @@ def check_k8s_manifests(root: Path) -> Iterator[Finding]:
             match = re.match(r"^\s*image:\s*[\"']?([^\"'\s]+)", line)
             if match and (":latest" in match.group(1) or _is_pinned(match.group(1)) is False):
                 yield Finding("FAIL", f"unpinned or :latest image in {rel}:{lineno}", line.strip())
-        if re.search(r"kind:\s*Deployment", text) and re.search(r"postgres", text, re.IGNORECASE):
-            yield Finding(
-                "FAIL",
-                f"{rel}: PostgreSQL as a Deployment (spec: must be a StatefulSet with a PVC)",
-            )
-        if re.search(r"type:\s*(NodePort|LoadBalancer)", text) and re.search(
-            r"postgres|redis", text, re.IGNORECASE
-        ):
-            yield Finding("FAIL", f"{rel}: the database or cache Service is NodePort/LoadBalancer")
+        # Per-document, not per-file: a file can legitimately contain both a Deployment (backend,
+        # unrelated to postgres) and, elsewhere in the same file, the word "postgres" (a
+        # DATABASE_URL, a comment) with no connection to that Deployment at all. Checking
+        # whole-file co-occurrence flags backend.yaml/frontend.yaml/redis.yaml as "PostgreSQL as
+        # a Deployment" just because the file mentions postgres somewhere and happens to also
+        # define an unrelated Deployment.
+        for doc in re.split(r"^---\s*$", text, flags=re.MULTILINE):
+            if re.search(r"name:\s*postgres\b|app:\s*postgres\b", doc, re.IGNORECASE) and re.search(
+                r"kind:\s*Deployment", doc
+            ):
+                yield Finding(
+                    "FAIL",
+                    f"{rel}: PostgreSQL as a Deployment (spec: must be a StatefulSet with a PVC)",
+                )
+            if re.search(r"name:\s*(postgres|redis)\b|app:\s*(postgres|redis)\b", doc, re.IGNORECASE) and re.search(
+                r"type:\s*(NodePort|LoadBalancer)", doc
+            ):
+                yield Finding(
+                    "FAIL", f"{rel}: the database or cache Service is NodePort/LoadBalancer"
+                )
     yield Finding("OK", f"checked {len(manifests)} Kubernetes manifest(s)")
 
 
@@ -276,13 +287,18 @@ def check_workflows(root: Path) -> Iterator[Finding]:
             yield Finding(
                 "WARN", f"{rel}: no top-level permissions: block (default is broader than needed)"
             )
-        # A crude per-job split: a line at exactly 2-space indent under "jobs:" starts a job.
-        job_starts = list(re.finditer(r"^  (\S+):\s*$", text, re.MULTILINE))
+        # A crude per-job split: a line at exactly 2-space indent starts a job - but only once
+        # scoped to the "jobs:" section. Without that scope, "on:\n  push:\n    branches:..."
+        # (a trigger, not a job) is also 2-space-indented and gets mistaken for a job literally
+        # named "push" with no needs:, which every workflow with a push trigger would always fail.
+        jobs_section_match = re.search(r"^jobs:\s*$", text, re.MULTILINE)
+        jobs_text = text[jobs_section_match.end() :] if jobs_section_match else ""
+        job_starts = list(re.finditer(r"^  (\S+):\s*$", jobs_text, re.MULTILINE))
         for i, job in enumerate(job_starts):
             job_id = job.group(1)
             start = job.end()
-            end = job_starts[i + 1].start() if i + 1 < len(job_starts) else len(text)
-            body = text[start:end]
+            end = job_starts[i + 1].start() if i + 1 < len(job_starts) else len(jobs_text)
+            body = jobs_text[start:end]
             if risky_name.search(job_id) and not re.search(r"^\s*needs:", body, re.MULTILINE):
                 yield Finding(
                     "FAIL",

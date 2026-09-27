@@ -16,6 +16,7 @@ from check_submission import (
     check_dockerfiles_pinned,
     check_env_never_in_history,
     check_env_not_tracked,
+    check_k8s_manifests,
     check_workflows,
 )
 
@@ -167,6 +168,32 @@ def test_a_deploy_job_with_needs_passes(tmp_path: Path) -> None:
     assert not any(f.level == "FAIL" for f in findings)
 
 
+def test_an_on_push_trigger_is_not_mistaken_for_a_job_named_push(tmp_path: Path) -> None:
+    # Real bug, caught against the project's own real cd.yml: "on:\n  push:\n    branches:
+    # [main]" is a trigger, not a job, but it sits at the same 2-space indent a job id does. A
+    # per-job split that isn't scoped to start after "jobs:" mistakes it for a job literally
+    # named "push" with no needs:, and fails every workflow that merely reacts to a push - which
+    # is nearly all of them.
+    workflows = tmp_path / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+    (workflows / "cd.yml").write_text(
+        "on:\n  push:\n    branches: [main]\n"
+        "permissions:\n  contents: read\n"
+        "jobs:\n"
+        "  test:\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps: []\n"
+        "  deploy:\n"
+        "    needs: test\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps: []\n"
+    )
+
+    findings = list(check_workflows(tmp_path))
+
+    assert not any(f.level == "FAIL" for f in findings)
+
+
 def test_missing_permissions_block_is_a_warning(tmp_path: Path) -> None:
     workflows = tmp_path / ".github" / "workflows"
     workflows.mkdir(parents=True)
@@ -182,6 +209,75 @@ def test_no_workflows_is_info(tmp_path: Path) -> None:
 
     assert findings == [findings[0]]
     assert findings[0].level == "INFO"
+
+
+# ---- k8s manifests: postgres must be a StatefulSet, DB/cache Services never NodePort/LB ----
+
+
+def test_postgres_as_a_deployment_fails(tmp_path: Path) -> None:
+    k8s = tmp_path / "k8s" / "base"
+    k8s.mkdir(parents=True)
+    (k8s / "postgres.yaml").write_text(
+        "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: postgres\n"
+    )
+
+    findings = list(check_k8s_manifests(tmp_path))
+
+    assert any(f.level == "FAIL" and "StatefulSet" in f.title for f in findings)
+
+
+def test_postgres_as_a_statefulset_passes(tmp_path: Path) -> None:
+    k8s = tmp_path / "k8s" / "base"
+    k8s.mkdir(parents=True)
+    (k8s / "postgres.yaml").write_text(
+        "apiVersion: apps/v1\nkind: StatefulSet\nmetadata:\n  name: postgres\n"
+    )
+
+    findings = list(check_k8s_manifests(tmp_path))
+
+    assert not any(f.level == "FAIL" for f in findings)
+
+
+def test_an_unrelated_deployment_mentioning_postgres_elsewhere_does_not_false_positive(
+    tmp_path: Path,
+) -> None:
+    # Real bug, caught against the project's own real manifests: backend.yaml is a Deployment
+    # (correctly - the backend is stateless) and, elsewhere in the same file, references a
+    # DATABASE_URL secret key whose value happens to contain "postgres". Checking for
+    # "kind: Deployment" and "postgres" ANYWHERE in the whole file - rather than within the same
+    # YAML document - flagged backend.yaml, frontend.yaml and redis.yaml as "PostgreSQL as a
+    # Deployment" for no reason connected to postgres at all.
+    k8s = tmp_path / "k8s" / "base"
+    k8s.mkdir(parents=True)
+    (k8s / "backend.yaml").write_text(
+        "apiVersion: apps/v1\n"
+        "kind: Deployment\n"
+        "metadata:\n"
+        "  name: backend\n"
+        "spec:\n"
+        "  template:\n"
+        "    spec:\n"
+        "      containers:\n"
+        "        - env:\n"
+        "            - name: DATABASE_URL\n"
+        "              value: postgresql://postgres:pw@postgres:5432/db\n"
+    )
+
+    findings = list(check_k8s_manifests(tmp_path))
+
+    assert not any(f.level == "FAIL" for f in findings)
+
+
+def test_redis_as_a_nodeport_service_fails(tmp_path: Path) -> None:
+    k8s = tmp_path / "k8s" / "base"
+    k8s.mkdir(parents=True)
+    (k8s / "redis.yaml").write_text(
+        "apiVersion: v1\nkind: Service\nmetadata:\n  name: redis\nspec:\n  type: NodePort\n"
+    )
+
+    findings = list(check_k8s_manifests(tmp_path))
+
+    assert any(f.level == "FAIL" and "NodePort" in f.title for f in findings)
 
 
 # ---- .env: never tracked, never in history (a real, throwaway git repo) ----
