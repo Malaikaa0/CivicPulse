@@ -1,0 +1,47 @@
+$ kubectl -n civicpulse describe vpa backend-vpa
+(captured mid/end of the first k6 load test - see hpa-watch.txt for the same test)
+
+Name:         backend-vpa
+Namespace:    civicpulse
+API Version:  autoscaling.k8s.io/v1
+Kind:         VerticalPodAutoscaler
+Spec:
+  Target Ref:
+    API Version:  apps/v1
+    Kind:         Deployment
+    Name:         backend
+  Update Policy:
+    Update Mode:  Off
+Status:
+  Conditions:
+    Type:  RecommendationProvided
+    Status: True
+  Recommendation:
+    Container Recommendations:
+      Container Name:  backend
+      Lower Bound:
+        Cpu:     25m
+        Memory:  262144k
+      Target:
+        Cpu:     587m
+        Memory:  262144k
+      Uncapped Target:
+        Cpu:     587m
+        Memory:  262144k
+      Upper Bound:
+        Cpu:     266119m
+        Memory:  49785178554
+
+Notes:
+- The guessed requests in the manifest before this recommendation were cpu: 250m, memory: 256Mi.
+  Memory was already almost exactly right (262144k = 256Mi). CPU was under-provisioned by more
+  than 2x for this load pattern.
+- Upper Bound is enormous (266 cores, 46Gi) because the recommender had only just started
+  building its usage histogram - VPA's confidence interval is intentionally wide until it has
+  more history. Target/Lower Bound are usable immediately; Upper Bound is not meant to be acted
+  on this early.
+- Within a few minutes of the load ending, the same `kubectl describe vpa` showed Target back
+  down to 25m - the recommender's percentile estimate reacts fairly quickly to a change in actual
+  usage, which is exactly why "record it, then decide" (rather than let VPA apply it live) is the
+  right model per spec: an automated Auto-mode VPA would have been raising and lowering backend's
+  CPU request from one moment to the next based on which end of the load level it last observed.

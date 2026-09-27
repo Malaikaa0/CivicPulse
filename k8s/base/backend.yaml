@@ -54,17 +54,30 @@ spec:
             httpGet: { path: /health, port: 8000 }
             failureThreshold: 30
             periodSeconds: 2
+          # timeoutSeconds is 3, not the 1s default: a real HPA load test (k8s/evidence/) showed
+          # the default was tight enough that a saturated event loop made a healthy pod miss its
+          # own liveness deadline, and kubelet restarted a pod that was merely busy, not broken -
+          # exactly the "restart loop across your entire deployment" a wired-backwards probe causes.
           livenessProbe: # restarts the pod - must NOT depend on the database (see app/routes/health.py)
             httpGet: { path: /health, port: 8000 }
             periodSeconds: 10
+            timeoutSeconds: 3
           readinessProbe: # removes the pod from the Service - SHOULD depend on the database (app/routes/ready.py)
             httpGet: { path: /ready, port: 8000 }
             periodSeconds: 5
+            timeoutSeconds: 3
           # requests.cpu is not a suggestion here: the HPA computes utilisation as usage/request,
           # so without it the HPA has no denominator and sits at <unknown>/60% forever.
+          #
+          # cpu: 600m (not the original 250m guess) - set from the VPA's own recommendation
+          # (k8s/base/vpa.yaml, updateMode: Off) after a real load test: `kubectl describe vpa
+          # backend-vpa` reported Target cpu: 587m at the load test's peak (see
+          # docs/ENGINEERING-NOTES.md question 6 for the before/after and what it did to the
+          # HPA's reported percentage). memory: 256Mi was already almost exactly what the VPA
+          # recommended (262144k) and is left as-is.
           resources:
-            requests: { cpu: "250m", memory: "256Mi" }
-            limits: { cpu: "500m", memory: "512Mi" }
+            requests: { cpu: "600m", memory: "256Mi" }
+            limits: { cpu: "1", memory: "512Mi" }
 ---
 apiVersion: v1
 kind: Service

@@ -1,10 +1,13 @@
 # Engineering Notes
 
-Answers to spec section 5.2. Three questions (2, 6, 7) still need infrastructure that does not
-exist yet — CI/CD and Docker network segmentation are M2's remaining half of the work — and are
-marked **PENDING** rather than guessed at. Question 5 (HPA lag) was PENDING for the same reason
-until the Kubernetes HPA and a real load test existed to measure; it is now answered from that
-measurement. The rest are answered from what is actually built and tested today.
+Answers to spec section 5.2. Question 2 (CI/CD maturity ladder) still needs infrastructure that
+does not exist yet — no `.github/workflows/*.yml` — and is marked **PENDING** rather than guessed
+at. Question 7 is marked PENDING below for the same reason it originally was, but note that
+`compose.yaml` referenced there now exists; that answer needs revisiting rather than left as
+written. Questions 5 (HPA lag) and 6 (VPA/HPA conflict) were PENDING for the same kind of reason —
+no Kubernetes manifests existed to measure against — until the HPA, VPA, and real load tests below
+existed; both are now answered from that measurement. The rest are answered from what is actually
+built and tested today.
 
 ---
 
@@ -120,13 +123,43 @@ cluster's HPA sync period (out of scope for a namespaced HPA object) or raising 
 above what steady-state traffic needs — which is just capacity planning wearing a different hat,
 and exactly the trade-off autoscaling cannot avoid.
 
-## 6. Why VPA is in Off mode — **PENDING**
+## 6. Why VPA is in Off mode
 
-Same blocker as question 5: no VPA is deployed yet. The reasoning (VPA raising a pod's CPU request
-lowers computed utilisation, which makes the HPA scale in, which raises per-pod load, which makes
-VPA raise the request again — a feedback loop between the two autoscalers acting on the same
-signal) can be stated in the abstract, but the spec asks for *this system's* failure mode, which
-needs the two actually running together at least once to describe honestly.
+Ran the full loop against a real k3d cluster with the official Vertical Pod Autoscaler installed
+(recommender, updater, admission-controller — `updateMode: "Off"` on `backend-vpa`,
+[`k8s/base/vpa.yaml`](../k8s/base/vpa.yaml)):
+
+1. **Recorded the guessed requests**: `cpu: 250m, memory: 256Mi` (the values `backend.yaml` shipped
+   with before this exercise).
+2. **Ran the load test** (the same k6 ramp used for question 5).
+3. **`kubectl describe vpa backend-vpa`** — full output in
+   [`k8s/evidence/vpa-recommendation.txt`](../k8s/evidence/vpa-recommendation.txt): `Target: cpu:
+   587m, memory: 262144k`. Memory was already almost exactly right; CPU was under-provisioned by
+   more than 2x for this load pattern.
+4. **Updated `backend.yaml`'s requests to `cpu: 600m`** (limits raised to `1` core to keep headroom
+   above the new request) — memory left at `256Mi`.
+5. **Re-ran the same load test against the updated Deployment and reported what changed about HPA
+   behaviour** — this is the interesting part, and it's the feedback loop the spec warns about,
+   caught in the act rather than just described:
+
+   | | requests.cpu: 250m (before) | requests.cpu: 600m (after) |
+   |---|---|---|
+   | Peak reported utilisation | 101%/60% (`k8s/evidence/hpa-watch.txt`) | 84%/60% (`k8s/evidence/hpa-watch-after-vpa-update.txt`) |
+   | Peak replicas for the *same* offered load | 4 | 3 |
+
+   The real CPU the backend burned under identical traffic didn't change — only the denominator
+   did. A bigger request makes the exact same usage read as a smaller percentage, so the HPA
+   scaled less aggressively for equal load. That is precisely the mechanism the spec's warning
+   describes: if VPA had been running in **Auto** mode instead of Off, it would have pushed
+   `backend.yaml`'s request up right after step 3's measurement, which — as just demonstrated —
+   lowers computed utilisation on its own, which tells the HPA to scale *in*, which raises
+   per-pod load on the smaller replica count, which pushes VPA's next recommendation back up
+   again. Two controllers, one signal (CPU), each reacting to a number the other one just moved.
+   Recommender-only mode breaks the loop at the one point that can't fight back: `kubectl describe
+   vpa` produces a number, a person reads it and decides whether the trade-off (more headroom per
+   pod vs. a less sensitive autoscaler) is worth taking, and only then does a new commit change
+   `resources.requests`. The record→test→describe→update→retest loop above *is* that human
+   decision, made once, on purpose, instead of continuously and automatically.
 
 ## 7. `internal: true` and the hosted LLM — **PENDING**
 
