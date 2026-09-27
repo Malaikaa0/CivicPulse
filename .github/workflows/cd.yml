@@ -1,0 +1,171 @@
+name: cd
+
+# spec 3.4: on push to main only - main is protected (PR + ≥1 approval required), so a push here
+# only ever happens by merging a reviewed PR.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE: ghcr.io/${{ github.repository_owner }}/civicpulse-backend
+  FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/civicpulse-frontend
+
+jobs:
+  # "The full suite again, on the merged result" - literally the same ci.yml, not a hand-picked
+  # subset of it, run against what main now contains rather than what the PR branch contained.
+  test:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+      security-events: write
+
+  # needs: test (spec 3.4 non-negotiable: "needs: on every publishing and deploying job. Without
+  # it you publish artifacts from code you already know is broken.") - a failure anywhere in the
+  # full suite above blocks this job from ever running.
+  build-push:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # GITHUB_TOKEN, scoped to this repo's packages - never an account password
+    outputs:
+      backend-digest: ${{ steps.push-backend.outputs.digest }}
+      frontend-digest: ${{ steps.push-frontend.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Deploy by immutable reference (spec 3.4 non-negotiable): every image is tagged with the
+      # commit SHA. `latest` is also pushed, purely for local `docker pull` convenience - it is
+      # never what overlays/prod deploys (see k8s/overlays/prod/kustomization.yaml and
+      # docs/adr/0003-deploy-by-sha.md).
+      - name: Build and push backend
+        id: push-backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+            ${{ env.BACKEND_IMAGE }}:latest
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      - name: Build and push frontend
+        id: push-frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+            ${{ env.FRONTEND_IMAGE }}:latest
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+      - name: SBOM - backend
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+          artifact-name: sbom-backend.spdx.json
+
+      - name: SBOM - frontend
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          artifact-name: sbom-frontend.spdx.json
+
+      - name: Print image digests
+        run: |
+          echo "backend digest:  ${{ steps.push-backend.outputs.digest }}"
+          echo "frontend digest: ${{ steps.push-frontend.outputs.digest }}"
+
+  # Spins up its own throwaway cluster in the runner (no persistent infra to manage or pay for),
+  # applies exactly what a real deploy would apply, and proves the rollout actually works before
+  # anyone calls the release done.
+  deploy-k8s:
+    needs: build-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install k3d
+        run: curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+
+      - name: Install kubeconform
+        run: |
+          curl -sL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz \
+            | tar -xz kubeconform
+          sudo mv kubeconform /usr/local/bin/
+
+      - name: Point overlays/prod at this build's SHA
+        working-directory: k8s/overlays/prod
+        run: |
+          curl -sL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize/v5.4.3/kustomize_v5.4.3_linux_amd64.tar.gz" | tar -xz
+          ./kustomize edit set image "${{ env.BACKEND_IMAGE }}=${{ env.BACKEND_IMAGE }}:${{ github.sha }}"
+          ./kustomize edit set image "${{ env.FRONTEND_IMAGE }}=${{ env.FRONTEND_IMAGE }}:${{ github.sha }}"
+          rm kustomize
+
+      - name: kustomize build | kubeconform (one more time, against the exact SHA-pinned manifests)
+        run: kubectl kustomize k8s/overlays/prod | kubeconform -summary -strict -ignore-missing-schemas -kubernetes-version 1.31.0
+
+      - name: Create ephemeral cluster
+        run: k3d cluster create cd-smoke --agents 1 --wait
+
+      - name: Apply overlays/prod
+        run: kubectl apply -k k8s/overlays/prod
+
+      # Real secrets, from GitHub Secrets, layered on top of the committed placeholders - never
+      # the other way around, and never committed anywhere (spec 3.4/5.3).
+      - name: Inject real secrets
+        run: |
+          kubectl -n civicpulse create secret generic civicpulse-secrets \
+            --from-literal=POSTGRES_PASSWORD="${{ secrets.POSTGRES_PASSWORD }}" \
+            --from-literal=DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+            --from-literal=GEMINI_API_KEY="${{ secrets.GEMINI_API_KEY }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+          kubectl -n civicpulse rollout restart deployment/backend
+
+      - name: Wait for rollout
+        run: |
+          kubectl -n civicpulse rollout status deployment/backend --timeout=180s
+          kubectl -n civicpulse rollout status deployment/frontend --timeout=180s
+          kubectl -n civicpulse rollout status statefulset/postgres --timeout=180s
+
+      # Through the Ingress, exactly like a real user - not a Service ClusterIP shortcut. Only
+      # hits /health and / (liveness-level checks): a real triage call through overlays/prod's
+      # TRIAGE_PROVIDER=llm would spend the real Gemini quota on every merge to main, which is a
+      # cost/flakiness trade-off this smoke test deliberately does not make.
+      - name: Smoke test through the Ingress
+        run: |
+          set -euo pipefail
+          LB_IP=$(kubectl -n kube-system get svc traefik -o jsonpath='{.spec.clusterIP}')
+          kubectl -n civicpulse run smoketest --rm -i --restart=Never --image=curlimages/curl:8.10.1 -- sh -c "
+            set -e
+            curl -sf -H 'Host: civicpulse.local' http://$LB_IP/api/stats
+            echo
+            code=\$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: civicpulse.local' http://$LB_IP/)
+            test \"\$code\" = \"200\"
+          "
+
+      - name: kubectl get hpa
+        if: always()
+        run: kubectl -n civicpulse get hpa
+
+      - name: Tear down ephemeral cluster
+        if: always()
+        run: k3d cluster delete cd-smoke
