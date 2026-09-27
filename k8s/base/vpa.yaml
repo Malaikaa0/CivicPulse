@@ -1,0 +1,19 @@
+# Recommender-only (updateMode: "Off"): VPA and the HPA (k8s/base/hpa.yaml) both watch the
+# backend's CPU. If this were in Auto mode, VPA raising the pod's CPU request would lower the
+# HPA's computed utilisation (usage/request), which would make the HPA scale in, which raises
+# per-pod load, which makes VPA raise the request again - two autoscalers fighting over the same
+# signal. Off mode breaks that loop: VPA only *recommends*, a human decides whether to act on it
+# (see docs/ENGINEERING-NOTES.md question 6), and it never evicts a running pod to enforce a
+# recommendation.
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: backend-vpa
+  namespace: civicpulse
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend
+  updatePolicy:
+    updateMode: "Off"

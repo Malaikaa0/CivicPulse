@@ -1,0 +1,31 @@
+# One host, two routes: / to the frontend (nginx, which serves the SPA and internally proxies
+# its own /api/ calls - see frontend/nginx.conf), /api straight to the backend Service, for
+# anything that talks to the API directly rather than through the SPA. ingressClassName is
+# traefik because k3d/k3s ships Traefik as its default ingress controller (confirmed via
+# `kubectl get ingressclass` on the local cluster) - swap this if deploying to a cluster whose
+# default is ingress-nginx instead.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: civicpulse
+  namespace: civicpulse
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: civicpulse.local
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 8080

@@ -1,0 +1,308 @@
+name: ci
+
+# spec 3.4: on PR to main, on push to dev. Also callable (workflow_call) so cd.yml's "test" job
+# can run this exact same suite again "on the merged result" without duplicating 7 jobs.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [dev]
+  workflow_call: {}
+
+# Least-privilege default (spec 3.4 non-negotiables) - every job that needs more than read
+# access to the repo declares its own narrower `permissions:` block instead of relying on a
+# broader top-level default.
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+
+jobs:
+  lint-and-type:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install -r requirements-dev.txt
+
+      - name: ruff
+        working-directory: backend
+        run: ruff check app
+
+      - name: mypy
+        working-directory: backend
+        run: mypy app
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: eslint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: tsc --noEmit
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+  test-backend:
+    runs-on: ubuntu-latest
+    # Real Postgres and Redis, not mocks - the same "prove it against real infrastructure"
+    # standard the backend's own test suite holds itself to locally.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      # TRIAGE_PROVIDER=simulated: deterministic, no LLM key needed, no network call, no flake -
+      # exactly what spec 3.4's ci.yml table asks for.
+      TRIAGE_PROVIDER: simulated
+      DATABASE_URL: postgresql+psycopg://test:test@localhost:5432/test
+      REDIS_URL: redis://localhost:6379/0
+      # Gate the "needs a real PostgreSQL/Redis" integration tests on
+      # (backend/tests/integration/conftest.py, test_triage_cache_redis.py): unset locally, set
+      # here since the services above are real.
+      TEST_DATABASE_URL: postgresql+psycopg://test:test@localhost:5432/test
+      TEST_REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install dependencies
+        working-directory: backend
+        run: pip install -r requirements-dev.txt
+
+      - name: pytest with coverage
+        working-directory: backend
+        run: pytest --cov=app --cov-report=term-missing --cov-fail-under=65
+
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Vitest
+        working-directory: frontend
+        run: npm run test -- --run
+
+  # Builds both images and hands them to the `scan` job as artifacts. Does NOT push - spec 3.4 is
+  # explicit that a PR must not publish artifacts; only cd.yml (on push to main) pushes to GHCR.
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: false
+          load: true
+          tags: civicpulse-backend:ci
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: false
+          load: true
+          tags: civicpulse-frontend:ci
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+      - name: Save images for the scan job
+        run: |
+          docker save civicpulse-backend:ci -o /tmp/backend-image.tar
+          docker save civicpulse-frontend:ci -o /tmp/frontend-image.tar
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ci-images
+          path: /tmp/*-image.tar
+          retention-days: 1
+
+  scan:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # to upload the SARIF results below
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ci-images
+          path: /tmp
+
+      - name: Load images
+        run: |
+          docker load -i /tmp/backend-image.tar
+          docker load -i /tmp/frontend-image.tar
+
+      # ignore-unfixed: only fail on a vulnerability that actually has a fix available - spec
+      # 3.4's exact wording ("failing on HIGH/CRITICAL with a fixed version available"). A
+      # HIGH/CRITICAL CVE with no fix yet would just make every build red for something nobody
+      # can act on.
+      - name: Trivy scan - backend
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: civicpulse-backend:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Trivy scan - frontend
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: civicpulse-frontend:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+  manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubeconform
+        run: |
+          curl -sL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz \
+            | tar -xz kubeconform
+          sudo mv kubeconform /usr/local/bin/
+
+      # kubectl ships its own kustomize (`kubectl kustomize`) - no separate install needed.
+      # -ignore-missing-schemas: the VPA CRD (autoscaling.k8s.io/v1) isn't in kubeconform's
+      # standard schema catalog; everything else is still checked -strict.
+      - name: kustomize build overlays/prod | kubeconform
+        run: |
+          kubectl kustomize k8s/overlays/prod | kubeconform -summary -strict -ignore-missing-schemas -kubernetes-version 1.31.0
+
+  # The direct answer to "does my code work with everybody else's code?" - a real stack, a real
+  # request, a real assertion on the response, not a mock anywhere in this job.
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write a CI .env
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_USER=civicpulse
+          POSTGRES_PASSWORD=ci-only-not-a-real-secret
+          POSTGRES_DB=civicpulse
+          DATABASE_URL=postgresql+psycopg://civicpulse:ci-only-not-a-real-secret@postgres:5432/civicpulse
+          REDIS_URL=redis://redis:6379/0
+          TRIAGE_PROVIDER=simulated
+          TRIAGE_TIMEOUT_SECONDS=10
+          TRIAGE_CACHE_TTL_SECONDS=86400
+          LLM_VENDOR=gemini
+          GEMINI_MODEL=gemini-3.5-flash-lite
+          STATS_CACHE_TTL_SECONDS=30
+          RATE_LIMIT_REQUESTS=10
+          RATE_LIMIT_WINDOW_SECONDS=60
+          TRUST_FORWARDED_FOR=false
+          LOG_LEVEL=INFO
+          EOF
+
+      - name: docker compose up
+        run: docker compose up -d --build
+
+      - name: Wait for /ready
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/ready; then echo; exit 0; fi
+            sleep 2
+          done
+          echo "backend never became ready"
+          docker compose logs
+          exit 1
+
+      - name: POST a complaint, GET it back, assert the category
+        run: |
+          set -euo pipefail
+          body=$(curl -sf -X POST http://localhost:8000/api/complaints \
+            -H "Content-Type: application/json" \
+            -d '{"text":"A water pipe burst on Main Street and is flooding the road.","location":"Main Street"}')
+          echo "$body"
+          id=$(echo "$body" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+          category=$(echo "$body" | python3 -c "import sys,json; print(json.load(sys.stdin)['category'])")
+          test -n "$id"
+          test "$category" != "null"
+          fetched=$(curl -sf http://localhost:8000/api/complaints/"$id")
+          echo "$fetched"
+          fetched_category=$(echo "$fetched" | python3 -c "import sys,json; print(json.load(sys.stdin)['category'])")
+          if [ "$category" != "$fetched_category" ]; then
+            echo "category mismatch: posted $category, fetched $fetched_category"
+            exit 1
+          fi
+
+      - name: X-Cache goes MISS then HIT
+        run: |
+          set -euo pipefail
+          first=$(curl -sf -D - -o /dev/null http://localhost:8000/api/stats | grep -i '^x-cache:' | tr -d '\r')
+          echo "first: $first"
+          echo "$first" | grep -qi 'MISS'
+          second=$(curl -sf -D - -o /dev/null http://localhost:8000/api/stats | grep -i '^x-cache:' | tr -d '\r')
+          echo "second: $second"
+          echo "$second" | grep -qi 'HIT'
+
+      - name: docker compose logs (always, for debugging)
+        if: always()
+        run: docker compose logs
+
+      - name: docker compose down -v
+        if: always()
+        run: docker compose down -v

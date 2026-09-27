@@ -1,0 +1,93 @@
+# Deployment, not StatefulSet: the backend is stateless (all state lives in postgres/redis),
+# so it can scale horizontally and be replaced in any order - exactly what the HPA needs.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: civicpulse
+spec:
+  replicas: 2
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0 # never fewer than 2 Ready pods during a rollout - the zero-downtime demo
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      # preStop gives the endpoint controller time to remove this pod from the Service before
+      # it stops accepting connections; the app's own SIGTERM handling (see backend/Dockerfile,
+      # --timeout-graceful-shutdown 25) then drains in-flight requests. 5s (preStop) + 25s
+      # (graceful) = 30s, so the grace period below leaves a margin instead of racing SIGKILL.
+      terminationGracePeriodSeconds: 35
+      containers:
+        - name: backend
+          image: ghcr.io/malaikaa0/civicpulse-backend:latest # overridden per-environment by overlays
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: civicpulse-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: civicpulse-secrets
+                  key: DATABASE_URL
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: civicpulse-secrets
+                  key: GEMINI_API_KEY
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "5"]
+          # All three, per spec 3.3 - and none of them interchangeable:
+          startupProbe: # slow start is not failure - this is what stops restart loops on boot
+            httpGet: { path: /health, port: 8000 }
+            failureThreshold: 30
+            periodSeconds: 2
+          # timeoutSeconds is 3, not the 1s default: a real HPA load test (k8s/evidence/) showed
+          # the default was tight enough that a saturated event loop made a healthy pod miss its
+          # own liveness deadline, and kubelet restarted a pod that was merely busy, not broken -
+          # exactly the "restart loop across your entire deployment" a wired-backwards probe causes.
+          livenessProbe: # restarts the pod - must NOT depend on the database (see app/routes/health.py)
+            httpGet: { path: /health, port: 8000 }
+            periodSeconds: 10
+            timeoutSeconds: 3
+          readinessProbe: # removes the pod from the Service - SHOULD depend on the database (app/routes/ready.py)
+            httpGet: { path: /ready, port: 8000 }
+            periodSeconds: 5
+            timeoutSeconds: 3
+          # requests.cpu is not a suggestion here: the HPA computes utilisation as usage/request,
+          # so without it the HPA has no denominator and sits at <unknown>/60% forever.
+          #
+          # cpu: 600m (not the original 250m guess) - set from the VPA's own recommendation
+          # (k8s/base/vpa.yaml, updateMode: Off) after a real load test: `kubectl describe vpa
+          # backend-vpa` reported Target cpu: 587m at the load test's peak (see
+          # docs/ENGINEERING-NOTES.md question 6 for the before/after and what it did to the
+          # HPA's reported percentage). memory: 256Mi was already almost exactly what the VPA
+          # recommended (262144k) and is left as-is.
+          resources:
+            requests: { cpu: "600m", memory: "256Mi" }
+            limits: { cpu: "1", memory: "512Mi" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: civicpulse
+spec:
+  type: ClusterIP
+  selector:
+    app: backend
+  ports:
+    - port: 8000
+      targetPort: 8000

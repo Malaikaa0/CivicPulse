@@ -1,0 +1,13 @@
+# Backend only, per spec 3.3. Guarantees at least 1 of the 2+ backend replicas survives a
+# voluntary disruption (node drain, cluster upgrade) - without this, both replicas could be
+# evicted at once and the backend goes fully dark even though it "has 2 replicas".
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend-pdb
+  namespace: civicpulse
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: backend
