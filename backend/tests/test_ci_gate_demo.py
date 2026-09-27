@@ -8,4 +8,4 @@ a check is red - not just that the checks exist. The second commit on this same 
 
 
 def test_ci_gate_demo() -> None:
-    assert 1 + 1 == 3  # deliberately wrong - fixed in the next commit on this PR
+    assert 1 + 1 == 2  # fixed
