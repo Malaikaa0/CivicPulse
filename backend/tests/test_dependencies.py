@@ -1,6 +1,7 @@
 """The wiring in app/dependencies.py. Nothing here connects to a database."""
 
 from collections.abc import Iterator
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import create_engine, text
@@ -20,7 +21,7 @@ def fresh_caches(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://user:pw@dbhost:5432/civic")
     monkeypatch.setenv("TRIAGE_PROVIDER", "simulated")
     # Captured now: a test may replace get_engine with a plain function, which has no cache.
-    caches = (get_settings, dependencies.get_engine, dependencies.get_triage_service)
+    caches = (get_settings, dependencies.get_engine)
     for cached in caches:
         cached.cache_clear()
     yield
@@ -35,16 +36,6 @@ def test_the_engine_is_built_once_from_the_configured_database_url() -> None:
     assert engine.url.host == "dbhost"
     assert engine.url.database == "civic"
     engine.dispose()
-
-
-def test_the_triage_service_is_built_once_and_uses_the_configured_provider() -> None:
-    service = dependencies.get_triage_service()
-
-    assert isinstance(service, TriageService)
-    assert service is dependencies.get_triage_service()
-    assert (
-        service.triage("Burst water main flooding Street 12", "Street 12").triaged_by == "rules"
-    )  # TRIAGE_PROVIDER=simulated
 
 
 def test_the_session_is_closed_when_the_request_is_over(
@@ -91,8 +82,11 @@ def test_the_complaint_service_is_built_over_the_repository_and_the_triage_servi
     session = Session()
     triage = TriageService(create_triage_provider(get_settings()))
 
-    service = dependencies.get_complaint_service(session, triage)
+    stats = SimpleNamespace(invalidate=lambda: None)
+
+    service = dependencies.get_complaint_service(session, triage, stats)
 
     assert isinstance(service, ComplaintService)
     assert isinstance(service._store, ComplaintRepository)
     assert service._triage is triage
+    assert service._on_write is stats.invalidate  # a write drops the stats cache

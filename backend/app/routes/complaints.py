@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Query
 from app.dependencies import get_complaint_service
 from app.domain import Category, Priority, Status
 from app.repositories.complaints import ComplaintFilters
+from app.routes.rate_limit import enforce_rate_limit
 from app.schemas import (
     ComplaintCreate,
     ComplaintOut,
@@ -33,7 +34,21 @@ _NOT_FOUND: dict[int | str, dict[str, Any]] = {
 }
 
 
-@router.post("", status_code=201, responses=_BAD_REQUEST)
+_RATE_LIMITED: dict[int | str, dict[str, Any]] = {
+    429: {
+        "model": ErrorOut,
+        "description": "Too many submissions from this client; see the Retry-After header",
+    }
+}
+
+
+# Only submission is limited: it is the endpoint that spends the hosted model's quota.
+@router.post(
+    "",
+    status_code=201,
+    dependencies=[Depends(enforce_rate_limit)],
+    responses={**_BAD_REQUEST, **_RATE_LIMITED},
+)
 def create_complaint(body: ComplaintCreate, service: ServiceDep) -> ComplaintOut:
     complaint = service.create(body.text, body.location, body.reporter_contact)
     return ComplaintOut.model_validate(complaint)
