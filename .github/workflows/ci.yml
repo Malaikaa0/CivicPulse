@@ -197,7 +197,7 @@ jobs:
       # HIGH/CRITICAL CVE with no fix yet would just make every build red for something nobody
       # can act on.
       - name: Trivy scan - backend
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: civicpulse-backend:ci
           severity: HIGH,CRITICAL
@@ -205,7 +205,7 @@ jobs:
           exit-code: "1"
 
       - name: Trivy scan - frontend
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: civicpulse-frontend:ci
           severity: HIGH,CRITICAL
