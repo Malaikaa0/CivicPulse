@@ -1,3 +1,9 @@
+# Measured on this checkout (Get-ChildItem -Recurse | Measure-Object Length -Sum), the same
+# machine, same commit: without this file, the build context is ~220MB, almost entirely
+# .venv/ (~175MB) and .mypy_cache/ (~43MB) - neither of which the image needs or should contain.
+# With it, the context is ~1-2MB: app/, alembic/, alembic.ini, requirements.txt. Over 99% smaller,
+# and every megabyte of it is something a fresh venv/mypy run recreates in seconds anyway.
+
 # Version control and virtualenvs
 .git
 .gitignore

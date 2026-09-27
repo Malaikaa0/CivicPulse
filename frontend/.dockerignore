@@ -1,3 +1,9 @@
+# Measured on this checkout (Get-ChildItem -Recurse | Measure-Object Length -Sum), the same
+# machine, same commit: without this file, the build context is ~99MB, almost entirely
+# node_modules/ (~99MB) - reinstalled fresh inside the builder stage from package-lock.json
+# regardless. With it, the context is under 1MB: src/, public/, index.html, package*.json,
+# config files. Over 99% smaller.
+
 # Version control
 .git
 .gitignore
