@@ -12,3 +12,4 @@ resources:
   - frontend.yaml
   - ingress.yaml
   - pdb.yaml
+  - hpa.yaml

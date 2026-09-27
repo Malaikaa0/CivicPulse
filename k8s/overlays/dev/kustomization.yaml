@@ -1,0 +1,48 @@
+# Local cluster (k3d/kind): images are built and imported/loaded straight into the cluster's
+# own containerd, never pulled from a registry, so newName+newTag point at the locally-tagged
+# images and imagePullPolicy is Never (see docs/RUNBOOK.md for the build+import commands).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+images:
+  - name: ghcr.io/malaikaa0/civicpulse-backend
+    newName: civicpulse-backend
+    newTag: local
+  - name: ghcr.io/malaikaa0/civicpulse-frontend
+    newName: civicpulse-frontend
+    newTag: local
+
+patches:
+  - target:
+      kind: Deployment
+      name: backend
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Never
+  - target:
+      kind: Deployment
+      name: frontend
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Never
+  - target:
+      kind: Job
+      name: migrate
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Never
+  # Verbose logging for local debugging; TRIAGE_PROVIDER stays "simulated" (base's default) -
+  # deterministic, no API key needed, matches the same convention .env.example uses for compose.
+  - target:
+      kind: ConfigMap
+      name: civicpulse-config
+    patch: |-
+      - op: replace
+        path: /data/LOG_LEVEL
+        value: "DEBUG"

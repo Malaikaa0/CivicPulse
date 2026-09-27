@@ -1,9 +1,10 @@
 # Engineering Notes
 
-Answers to spec section 5.2. Four questions (2, 5, 6, 7) need infrastructure that does not exist
-yet — Kubernetes, CI/CD, and Docker network segmentation are M2's half of the work — and are
-marked **PENDING** rather than guessed at. The other four are answered from what is actually built
-and tested today.
+Answers to spec section 5.2. Three questions (2, 6, 7) still need infrastructure that does not
+exist yet — CI/CD and Docker network segmentation are M2's remaining half of the work — and are
+marked **PENDING** rather than guessed at. Question 5 (HPA lag) was PENDING for the same reason
+until the Kubernetes HPA and a real load test existed to measure; it is now answered from that
+measurement. The rest are answered from what is actually built and tested today.
 
 ---
 
@@ -92,10 +93,32 @@ yields a result with `triaged_by == "rules:fallback"` — proven at the unit lev
 (`test_triage_service.py`), at the HTTP level (`test_complaint_routes.py`, parametrised over all
 five `TriageError` types), and against a real database (`test_complaints_db.py`).
 
-## 5. HPA lag — **PENDING**
+## 5. HPA lag
 
-No Kubernetes manifests exist yet (M2's half). This needs a real `kubectl get hpa -w` capture
-during a load test, which needs the cluster, the HPA, and `metrics-server` to exist first.
+Measured against a real k3d cluster with `backend-hpa` (`k8s/base/hpa.yaml`) and a k6 load
+test ramping to 40 VUs against `GET /api/complaints`; the full capture is
+[`k8s/evidence/hpa-watch.txt`](../k8s/evidence/hpa-watch.txt) and
+[`k8s/evidence/k6-load-test-output.txt`](../k8s/evidence/k6-load-test-output.txt).
+
+Offered load finished ramping to its full 40 VUs at approximately t=30s into the test. CPU
+utilization was still at 20% at the previous fifteen-second sample and had jumped to 101% by
+t=31s; by the next sample, at t=46s, `kubectl get hpa` already showed 4 replicas. That ~15-second
+window is almost entirely the HorizontalPodAutoscaler controller's own sync period (15s by
+default, not something this HPA object configures) — `behavior.scaleUp.stabilizationWindowSeconds:
+0` in the manifest means Kubernetes adds no deliberate delay of its own on top of that. The new
+pods were created in the same window and were already `1/1 Ready` well before the next check
+(~87s later), which is mostly container start (the images were already resident on both nodes,
+so there was no pull to wait on) plus the `startupProbe`'s 2-second check interval — a small
+fraction of the total lag compared to the controller's sync period. Call it roughly 15-20 seconds
+from full load to a scaling decision, and a further single-digit number of seconds for that
+capacity to actually be Ready and serving. During that whole window the original 2 replicas
+absorbed the entire burst alone: p95 latency degraded to 3.49s (`k6-load-test-output.txt`) against
+a normal sub-second baseline, but 0 of 3900 requests failed — the system slowed down under
+pressure rather than falling over, which is the outcome the readiness probe and the HPA's request-
+based denominator are there to produce. Shrinking this lag further would mean lowering the
+cluster's HPA sync period (out of scope for a namespaced HPA object) or raising `minReplicas`
+above what steady-state traffic needs — which is just capacity planning wearing a different hat,
+and exactly the trade-off autoscaling cannot avoid.
 
 ## 6. Why VPA is in Off mode — **PENDING**
 

@@ -1,0 +1,28 @@
+# Real cluster: images come from GHCR, addressed by an immutable commit-SHA tag (never
+# :latest), same reasoning as compose.prod.yaml/ADR-0003. `newTag: latest` here is a
+# placeholder overwritten by the CD job right before deploy:
+#   kustomize edit set image ghcr.io/malaikaa0/civicpulse-backend=ghcr.io/malaikaa0/civicpulse-backend:$SHA
+#   kustomize edit set image ghcr.io/malaikaa0/civicpulse-frontend=ghcr.io/malaikaa0/civicpulse-frontend:$SHA
+# so what actually ships is always traceable to the commit that built it.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+images:
+  - name: ghcr.io/malaikaa0/civicpulse-backend
+    newTag: latest
+  - name: ghcr.io/malaikaa0/civicpulse-frontend
+    newTag: latest
+
+patches:
+  # Real triage, not the deterministic simulated provider CI/dev use - this is the one place
+  # the LLM key (from the Secret, never the manifest) actually gets used.
+  - target:
+      kind: ConfigMap
+      name: civicpulse-config
+    patch: |-
+      - op: replace
+        path: /data/TRIAGE_PROVIDER
+        value: "llm"
