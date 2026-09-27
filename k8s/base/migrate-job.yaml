@@ -1,0 +1,30 @@
+# One-shot, same reasoning as compose.yaml's migrate service: alembic upgrade head is a
+# deliberate, reviewable step, not something that happens as a side effect of the backend
+# booting (spec 2.3 - no CREATE TABLE in application startup code, ever). Not one of the
+# officially-graded objects in 3.3's table, but without it the backend Deployment has nothing
+# to read from - run this (`kubectl apply -f` / part of the deploy job) before rolling out
+# backend against a fresh database.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate
+  namespace: civicpulse
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: ghcr.io/malaikaa0/civicpulse-backend:latest # overridden per-environment by overlays
+          imagePullPolicy: IfNotPresent
+          command: ["alembic", "upgrade", "head"]
+          envFrom:
+            - configMapRef:
+                name: civicpulse-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: civicpulse-secrets
+                  key: DATABASE_URL
