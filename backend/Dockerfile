@@ -38,5 +38,9 @@ EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
     CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
 
-# Exec form: uvicorn is PID 1 and receives SIGTERM directly.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Exec form: uvicorn is PID 1 and receives SIGTERM directly. On SIGTERM it stops accepting
+# connections and lets in-flight requests finish, for at most 25 s: under Kubernetes' default
+# terminationGracePeriodSeconds of 30, so uvicorn exits by itself before SIGKILL arrives.
+# The app writes its own JSON access-log line per request, so uvicorn's plain-text one is off.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", \
+     "--no-access-log", "--timeout-graceful-shutdown", "25"]
