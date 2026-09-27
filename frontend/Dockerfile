@@ -15,6 +15,10 @@ RUN npm run build
 # ---- runtime: nginx only. No Node, no node_modules, no source ----
 FROM nginx:1.27-alpine
 
+# Same reasoning as backend/Dockerfile: the tag pins nginx, not the underlying Alpine packages,
+# so apply upstream's own security patches on top of it (caught by ci.yml's Trivy scan job).
+RUN apk update && apk upgrade --no-cache
+
 # Run as the image's built-in unprivileged user rather than root. A port below 1024 needs root
 # to bind, so nginx listens on 8080 here (see nginx.conf) instead of the default 80.
 RUN sed -i '/^user /d' /etc/nginx/nginx.conf \

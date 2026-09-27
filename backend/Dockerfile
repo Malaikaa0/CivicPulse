@@ -20,6 +20,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH"
 
+# The base image tag pins Python; it does not pin (or auto-update) the underlying Debian
+# packages, so OS-level CVEs (openssl, perl-base, ...) accumulate against a fixed tag over time
+# even though Debian already ships the fix. Caught by ci.yml's Trivy scan job, which fails on
+# exactly this: HIGH/CRITICAL with a fixed version available.
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
 
