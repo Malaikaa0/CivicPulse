@@ -10,7 +10,11 @@ from sqlalchemy import Enum as SAEnum
 from sqlalchemy import text as sql_text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from app.domain import Category, Priority, Status
+from app.domain import Category, Priority, Status, TriagedBy
+
+# Built from the enum so the application and the database agree on the allowed values. Adding a
+# member here requires a new migration; tests/test_schema.py fails until that migration exists.
+TRIAGED_BY_CHECK = "triaged_by IN (" + ", ".join(f"'{m.value}'" for m in TriagedBy) + ")"
 
 
 class Base(DeclarativeBase):
@@ -35,10 +39,7 @@ class Complaint(Base):
             "ai_summary IS NULL OR char_length(ai_summary) <= 140",
             name="ck_complaints_summary_length",
         ),
-        CheckConstraint(
-            "triaged_by IN ('llm:groq', 'llm:ollama', 'rules', 'rules:fallback')",
-            name="ck_complaints_triaged_by",
-        ),
+        CheckConstraint(TRIAGED_BY_CHECK, name="ck_complaints_triaged_by"),
         CheckConstraint("triage_latency_ms >= 0", name="ck_complaints_latency_nonnegative"),
         # Serves the dashboard list: WHERE status = ? [AND priority = ?]. Leading column is
         # status, so it also serves status-only filters; priority-only filters do not use it.

@@ -7,6 +7,7 @@ have to point at localhost, which never works between containers.
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,9 +21,23 @@ class Settings(BaseSettings):
     triage_timeout_seconds: float = 10.0
     triage_cache_ttl_seconds: int = 86400
 
+    # Used when TRIAGE_PROVIDER=llm. One provider class serves both vendors, because both
+    # expose an OpenAI-compatible endpoint. Keys are SecretStr so they never appear in a repr
+    # or a log line, and they come from the environment only.
+    llm_vendor: Literal["gemini", "groq"] = "gemini"
+    gemini_api_key: SecretStr | None = None
+    # Pinned to a named model on purpose: an alias like "-latest" can change behaviour under us.
+    # Models get retired (gemini-2.5-flash-lite already was), so this is configurable.
+    gemini_model: str = "gemini-3.5-flash-lite"
+    groq_api_key: SecretStr | None = None
+    groq_model: str | None = None
+
     stats_cache_ttl_seconds: int = 30
     rate_limit_requests: int = 10
     rate_limit_window_seconds: int = 60
+    # Off by default: X-Forwarded-For is client-controlled unless a proxy we run overwrites it, so
+    # trusting it blindly lets anyone dodge the rate limit by sending a different value each time.
+    trust_forwarded_for: bool = False
 
     log_level: str = "INFO"
 
