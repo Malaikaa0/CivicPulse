@@ -11,8 +11,8 @@ permissions:
   contents: write # to create the GitHub Release
 
 env:
-  BACKEND_IMAGE: ghcr.io/${{ github.repository_owner }}/civicpulse-backend
-  FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/civicpulse-frontend
+  BACKEND_IMAGE: ghcr.io/malaikaa0/civicpulse-backend
+  FRONTEND_IMAGE: ghcr.io/malaikaa0/civicpulse-frontend
 
 jobs:
   build-push-tag:
