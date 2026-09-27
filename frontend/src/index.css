@@ -37,3 +37,390 @@ body {
   background: #fee2e2;
   color: #991b1b;
 }
+
+/* Submit page */
+
+.submit-page {
+  max-width: 40rem;
+  margin: 4rem auto;
+  padding: 0 1.5rem;
+}
+
+.submit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+}
+
+.submit-form .field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.submit-form label {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.submit-form input,
+.submit-form textarea {
+  font: inherit;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid #9ca3af;
+  border-radius: 0.375rem;
+  background: canvas;
+  color: canvastext;
+}
+
+.submit-form input:focus-visible,
+.submit-form textarea:focus-visible,
+.submit-form button:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.submit-form input[aria-invalid="true"],
+.submit-form textarea[aria-invalid="true"] {
+  border-color: #991b1b;
+}
+
+.submit-form button {
+  align-self: flex-start;
+  font: inherit;
+  padding: 0.5rem 1.25rem;
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+  background: #2563eb;
+  color: #fff;
+  cursor: pointer;
+}
+
+.submit-form button:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+.field-error {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #991b1b;
+}
+
+.form-error {
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.submit-result {
+  margin-top: 2rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid #86efac;
+  border-radius: 0.5rem;
+  background: #dcfce7;
+  color: #166534;
+}
+
+.submit-result dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 0.75rem;
+  margin: 0.75rem 0;
+}
+
+.submit-result dt {
+  font-weight: 600;
+}
+
+.submit-result dd {
+  margin: 0;
+}
+
+.provider-badge {
+  display: inline-block;
+  margin-top: 0.5rem;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  background: #f3f4f6;
+  color: #4b5563;
+  font-size: 0.8rem;
+}
+
+/* Dashboard page */
+
+.dashboard {
+  max-width: 60rem;
+  margin: 2rem auto;
+  padding: 0 1.5rem 3rem;
+}
+
+.dashboard-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 1rem 0 1.5rem;
+}
+
+.dashboard-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.dashboard-filters select {
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid #9ca3af;
+  background: Canvas;
+  color: CanvasText;
+}
+
+.dashboard-error,
+.complaint-error {
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.dashboard-loading {
+  color: #4b5563;
+}
+
+.dashboard-empty {
+  color: #4b5563;
+  font-style: italic;
+}
+
+.complaint-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.complaint-card {
+  border: 1px solid #9ca3af;
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+.complaint-card h3 {
+  margin: 0 0 0.5rem;
+}
+
+.complaint-meta {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.75rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+.complaint-meta dt {
+  font-weight: 600;
+}
+
+.complaint-meta dd {
+  margin: 0;
+}
+
+.complaint-text {
+  margin: 0 0 0.75rem;
+}
+
+.complaint-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.complaint-actions-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.dashboard-pagination {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.dashboard button,
+.dashboard select {
+  cursor: pointer;
+}
+
+.dashboard button:disabled,
+.dashboard select:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.dashboard button {
+  font: inherit;
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.375rem;
+  border: 1px solid #9ca3af;
+  background: Canvas;
+  color: CanvasText;
+}
+
+.dashboard button:focus-visible,
+.dashboard select:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+/* Stats page */
+
+.stats-page {
+  max-width: 48rem;
+}
+
+.stats-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.stats-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.stats-refresh {
+  border: 1px solid #9ca3af;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: inherit;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.stats-refresh:hover:not(:disabled) {
+  background: rgba(127, 127, 127, 0.1);
+}
+
+.stats-refresh:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.stats-refresh:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.stats-cache {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.stats-cache[data-state="hit"] {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.stats-cache[data-state="miss"] {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.stats-cache[data-state="unknown"] {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.stats-total {
+  font-size: 1.1rem;
+  margin: 1rem 0;
+}
+
+.stats-group {
+  margin: 1.5rem 0;
+}
+
+.stats-group h2 {
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.stats-empty {
+  color: #6b7280;
+  font-style: italic;
+  margin: 0;
+}
+
+.stats-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.stats-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0.75rem;
+  border-radius: 0.375rem;
+  background: rgba(127, 127, 127, 0.08);
+}
+
+.stats-list-label {
+  text-transform: capitalize;
+}
+
+.stats-list-count {
+  font-weight: 600;
+}
+
+/* App nav */
+.app-nav {
+  display: flex;
+  gap: 0.5rem;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  flex-wrap: wrap;
+}
+
+.app-nav-tab {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+  padding: 0.4rem 0.8rem;
+  font: inherit;
+  cursor: pointer;
+  color: inherit;
+}
+
+.app-nav-tab:hover {
+  background: #f3f4f6;
+}
+
+.app-nav-tab[aria-current="page"] {
+  border-color: currentColor;
+  font-weight: 600;
+}
