@@ -5,8 +5,8 @@ tested and run in this repository, with file-and-line references. Questions 2 (C
 ladder), 5 (HPA lag), 6 (VPA/HPA conflict) and 7 (`internal: true` and the hosted LLM) were
 originally marked PENDING because the workflows, Kubernetes manifests and `compose.yaml` they
 depend on did not exist yet; each was answered once that infrastructure existed and could be
-pointed at. One item in the supplementary "design justifications" section at the end (E4, Redis
-AOF persistence) is still marked **PENDING**.
+pointed at. The supplementary "design justifications" section at the end is complete too; E4
+(Redis AOF persistence) was the last item, answered once the volume could be tested.
 
 ---
 
@@ -361,14 +361,20 @@ for the same distributed reason at a smaller scale: two separate Redis commands 
 EXPIRE) are not atomic across two pods issuing them concurrently, and a process dying between the
 two would leave a counter key with no expiry, permanently blocking that client.
 
-**E4 — Redis AOF on a named volume, and why a cache needs persistence at all — PENDING.** This
-needs `compose.yaml` to exist (the volume declaration is M2's). The honest answer to "why does a
-cache need persistence when the whole point of a cache is that it can be rebuilt" has two sides,
-and the actual configuration should state which one this system picked: (a) the stats cache and
-the rate-limiter counters truly can be rebuilt from PostgreSQL and from a clean slate respectively,
-so AOF buys only a faster warm-up after a restart, or (b) the 24-hour content-hash triage cache
-represents real (if reproducible) work — losing it after a Redis restart means the next instance
-of every duplicate complaint costs a fresh inference again, which is the exact cost the cache
-exists to avoid. Argument (b) is the stronger one given what this Redis instance actually stores,
-but it should be confirmed once the volume is configured and can be tested by restarting the
-container and checking the cache survives.
+**E4 — Redis AOF on a named volume, and why a cache needs persistence at all.** Configured in
+all three places Redis runs: `compose.yaml:50` (`redis-server --appendonly yes`) with the
+`redisdata` named volume mounted at `/data` (`compose.yaml:19,52`), the same in
+`compose.prod.yaml:44-46`, and on Kubernetes as a Deployment with its own PVC
+(`k8s/base/redis.yaml:7,33,37`).
+
+Not everything in this Redis needs it. The stats cache (30 s TTL) is rebuilt from PostgreSQL on
+the next miss, and losing the rate-limiter counters on a restart only gives a client a fresh
+window. What does need it is the content-hash triage cache
+(`backend/app/providers/triage/caching.py:135`, 24 h TTL by default): each entry is the result of
+an LLM call. Lose those on a restart and every repeat complaint pays for a fresh inference again,
+which is the exact cost the cache exists to avoid.
+
+Tested, not assumed: a key written with `SET triage:demo ... EX 86400` into `redis:7
+--appendonly yes` on a named volume was still there after the container was deleted and
+recreated, with its TTL still counting down (86393 s left). The same test without the volume lost
+the key. AOF alone isn't enough; it has to be on a volume that outlives the container.
