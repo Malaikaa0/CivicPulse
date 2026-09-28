@@ -173,4 +173,12 @@ describe("SubmitPage", () => {
       expect(screen.getByText(/something went wrong/i)).toBeInTheDocument();
     });
   });
+
+  it("marks description and location as required, and contact as optional", () => {
+    render(<SubmitPage />);
+
+    expect(screen.getByLabelText(/description/i)).toHaveAttribute("aria-required", "true");
+    expect(screen.getByLabelText(/location/i)).toHaveAttribute("aria-required", "true");
+    expect(screen.getByLabelText(/contact/i)).not.toHaveAttribute("aria-required");
+  });
 });
