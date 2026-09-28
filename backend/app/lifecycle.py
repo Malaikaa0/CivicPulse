@@ -12,6 +12,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.config import get_settings
+from app.providers.triage.factory import create_triage_provider
+
 logger = logging.getLogger("civicpulse.lifecycle")
 
 _lock = threading.Lock()
@@ -45,6 +48,10 @@ def close_all() -> int:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    # Build the triage provider once at startup and throw it away: a bad TRIAGE_PROVIDER or a
+    # missing LLM key then stops the container from starting (a failed deploy, visible at once)
+    # instead of turning the first citizen's complaint into a 500. No network call is made.
+    create_triage_provider(get_settings())
     yield
     logger.info("shutting down")
     failed = close_all()

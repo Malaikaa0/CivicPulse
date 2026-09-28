@@ -71,7 +71,7 @@ def _record(store: FakeStore, count: int, *, fallback: bool = False) -> None:
 # --- describe_provider -------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("provider", ["simulated", "rules", "ollama"])
+@pytest.mark.parametrize("provider", ["simulated", "rules"])
 def test_vendor_and_model_are_null_unless_the_provider_is_llm(provider: str) -> None:
     info = describe_provider(_settings(triage_provider=provider))
 

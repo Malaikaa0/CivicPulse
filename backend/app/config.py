@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     database_url: str
     redis_url: str
 
-    triage_provider: Literal["llm", "ollama", "rules", "simulated"] = "simulated"
+    triage_provider: Literal["llm", "rules", "simulated"] = "simulated"
     triage_timeout_seconds: float = 10.0
     triage_cache_ttl_seconds: int = 86400
 

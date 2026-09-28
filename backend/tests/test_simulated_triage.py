@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 
 from app.config import Settings
 from app.domain import Category
@@ -108,6 +109,8 @@ def test_factory_selects_the_provider_named_in_settings() -> None:
     assert isinstance(create_triage_provider(_settings("simulated")), SimulatedTriage)
 
 
-def test_factory_is_explicit_about_providers_not_built_yet() -> None:
-    with pytest.raises(NotImplementedError):
-        create_triage_provider(_settings("ollama"))
+def test_unbuilt_providers_are_rejected_by_settings_validation() -> None:
+    # Ollama was evaluated and not built (issue #45). Rejecting it here, when settings load,
+    # means a misconfigured deploy fails at startup instead of 500ing on the first complaint.
+    with pytest.raises(ValidationError):
+        _settings("ollama")

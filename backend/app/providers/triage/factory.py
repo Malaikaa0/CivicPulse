@@ -50,5 +50,3 @@ def create_triage_provider(settings: Settings) -> TriageProvider:
             return SimulatedTriage()
         case "llm":
             return _create_llm(settings)
-        case "ollama":
-            raise NotImplementedError("TRIAGE_PROVIDER='ollama' is not implemented yet")
