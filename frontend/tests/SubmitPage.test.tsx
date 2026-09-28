@@ -181,4 +181,24 @@ describe("SubmitPage", () => {
     expect(screen.getByLabelText(/location/i)).toHaveAttribute("aria-required", "true");
     expect(screen.getByLabelText(/contact/i)).not.toHaveAttribute("aria-required");
   });
+
+  it("keeps a Retry-After of 0 instead of dropping it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ detail: "Rate limit exceeded." }), {
+          status: 429,
+          headers: { "Retry-After": "0" },
+        }),
+      ),
+    );
+
+    render(<SubmitPage />);
+    fillValidForm();
+    fireEvent.click(screen.getByRole("button", { name: /submit/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/try again in 0 seconds/i)).toBeInTheDocument();
+    });
+  });
 });
