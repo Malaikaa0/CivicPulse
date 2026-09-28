@@ -56,6 +56,13 @@ Either way, `postgres` and `redis` are untouched by a backend/frontend rollback 
 StatefulSet and a Deployment with their own PVCs, never rolled back alongside the stateless
 tiers, and `pgdata`/`redisdata` survive regardless of which image tag is running.
 
+Both paths have been exercised for real: `k8s/evidence/rollback.txt` is a captured
+`kubectl rollout undo` (10 replicas back to the previous image in one command), and
+`k8s/evidence/zero-downtime-rollout.txt` is the forward rollout it undid, run under load with
+0 of 19087 requests failing. Note from the capture: `undo` creates a *new* revision rather than
+returning to the old one, and warns that `last-applied-configuration` is now stale - one more
+reason the declarative path is the one to finish with.
+
 ## Reading logs
 
 Every log line is one JSON object on stdout (`backend/app/logging_config.py:41`,
