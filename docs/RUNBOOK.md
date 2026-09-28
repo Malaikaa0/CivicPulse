@@ -49,9 +49,16 @@ kubectl -n civicpulse rollout history deployment/backend   # see revisions first
 or, declaratively (preferred - the git history is the record of what changed, not the cluster's
 own rollout history, which is lost if the Deployment is ever deleted and recreated):
 ```
+cd k8s/overlays/prod
 kustomize edit set image ghcr.io/malaikaa0/civicpulse-backend=ghcr.io/malaikaa0/civicpulse-backend:<previous-sha>
+kustomize edit set image ghcr.io/malaikaa0/civicpulse-frontend=ghcr.io/malaikaa0/civicpulse-frontend:<previous-sha>
+cd -
 kubectl apply -k k8s/overlays/prod
+kubectl -n civicpulse rollout status deployment/backend
 ```
+Commit that `kustomization.yaml` change (via a PR, like any other change to `main`) so the
+repository says what is running. `<previous-sha>` is the commit whose `cd.yml` run last
+deployed cleanly - `gh run list --workflow=cd.yml --status=success` lists them.
 Either way, `postgres` and `redis` are untouched by a backend/frontend rollback - they're a
 StatefulSet and a Deployment with their own PVCs, never rolled back alongside the stateless
 tiers, and `pgdata`/`redisdata` survive regardless of which image tag is running.
@@ -82,6 +89,16 @@ complaint id, the provider that failed, and the error class:
 ```
 docker compose logs backend | grep '"level":"WARNING"'
 ```
+
+**On Kubernetes** the same JSON lines are the pods' stdout:
+```
+kubectl -n civicpulse logs -l app=backend --tail=200 --prefix     # all backend pods
+kubectl -n civicpulse logs -l app=backend --tail=500 | grep '"level":"WARNING"'
+kubectl -n civicpulse logs job/migrate                            # schema migration output
+kubectl -n civicpulse logs <pod> --previous                       # a pod that restarted
+```
+`--previous` matters: after a liveness-probe restart, the interesting lines are in the
+container that died, not the one that replaced it.
 
 ## When triage starts failing
 
