@@ -381,4 +381,4 @@ the key. AOF alone isn't enough; it has to be on a volume that outlives the cont
 
 The spec's third named volume, `ollama_models`, is intentionally absent: it exists to cache the
 Ollama provider's model weights, and that provider was evaluated and not built (issue #45;
-`factory.py:53-54` raises `NotImplementedError` for it). `compose.yaml:18-21` records the same.
+`backend/app/config.py:20` doesn't accept `ollama` as a provider). `compose.yaml:18-21` records the same.

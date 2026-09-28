@@ -1,6 +1,6 @@
 # ADR-0004: PII and data governance
 
-- **Status:** Proposed - pending review by M2
+- **Status:** Accepted
 - **Owner:** M1 (backend / AI)
 
 ## Context
@@ -29,9 +29,10 @@ Two facts shape the decision:
    `backend/app/providers/triage/redaction.py`.
 3. **The redacted text is what is cached and logged, never the original.** The content-hash
    cache key and any log line use the redacted form.
-4. **Deployments that cannot accept the residual risk use the offline provider.**
-   `TRIAGE_PROVIDER=ollama` keeps everything on the machine; `TRIAGE_PROVIDER=rules` never
-   calls out at all.
+4. **Deployments that cannot accept the residual risk run without the hosted model.**
+   `TRIAGE_PROVIDER=rules` never calls out at all. An offline Ollama provider would have kept
+   model-quality triage on the machine, but it was evaluated and not built (issue #45), so
+   `rules` is the only fully local option in this codebase.
 5. **The API key comes from the environment only** (a Kubernetes Secret, GitHub Secrets, a
    gitignored `.env`) and is never logged or committed.
 

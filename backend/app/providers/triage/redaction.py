@@ -2,8 +2,8 @@
 
 What this does NOT do: detect names or street addresses written inside the free text. That
 cannot be done reliably with patterns, and pretending otherwise would be worse than saying so.
-The residual risk is documented in ADR-0004; the offline Ollama provider is the answer for
-deployments that cannot accept it.
+The residual risk is documented in ADR-0004; deployments that cannot accept it should run
+TRIAGE_PROVIDER=rules, which never sends text anywhere.
 
 Design rule: over-redacting a phone number costs the model nothing (it triages on the words
 around it), but redacting "Street 12" or "three days" would damage the triage. So numbers are

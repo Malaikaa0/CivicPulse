@@ -1,6 +1,6 @@
 # ADR-0001: Triage provider interface
 
-- **Status:** Proposed - pending review by M2
+- **Status:** Accepted
 - **Owner:** M1 (backend / AI)
 
 ## Context
@@ -9,9 +9,10 @@ fine-tuned classifier later. The rest of the system must not care which one is a
 must keep working when the LLM is slow, rate-limited or wrong.
 
 ## Decision
-A `TriageProvider` Protocol (`name`, `triage(text, location) -> TriageResult`) with four
-implementations selected by the `TRIAGE_PROVIDER` environment variable: `llm`, `ollama`,
-`rules` and `simulated`.
+A `TriageProvider` Protocol (`name`, `triage(text, location) -> TriageResult`) with three
+implementations selected by the `TRIAGE_PROVIDER` environment variable: `llm`, `rules` and
+`simulated`. A fourth, offline `ollama` provider was planned, evaluated and deliberately not
+built (issue #45); it is not an accepted `TRIAGE_PROVIDER` value.
 
 - `RuleBasedTriage` is deterministic and never fails. It is the fallback.
 - `SimulatedTriage` is deterministic, seeded and network-free, with scripted failures. CI runs

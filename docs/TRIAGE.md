@@ -47,9 +47,9 @@ carrying a `retryable` flag:
 ## Providers and `TRIAGE_PROVIDER`
 
 `TRIAGE_PROVIDER` is read by `Settings`
-([`backend/app/config.py:20`](../backend/app/config.py#L20)) as one of `llm`, `ollama`, `rules`,
+([`backend/app/config.py:20`](../backend/app/config.py#L20)) as one of `llm`, `rules`,
 `simulated`, defaulting to `simulated`. `create_triage_provider`
-([`backend/app/providers/triage/factory.py:45-54`](../backend/app/providers/triage/factory.py#L45-L54))
+([`backend/app/providers/triage/factory.py:45-52`](../backend/app/providers/triage/factory.py#L45-L52))
 maps it to a provider:
 
 | `TRIAGE_PROVIDER` | Provider | `name` | Notes |
@@ -57,7 +57,7 @@ maps it to a provider:
 | `llm` | `LLMTriage` ([`llm.py`](../backend/app/providers/triage/llm.py)) | `llm:gemini` or `llm:groq` | Chosen by `LLM_VENDOR` (default `gemini`). Both use the OpenAI SDK against an OpenAI-compatible base URL ([`factory.py:11-12`](../backend/app/providers/triage/factory.py#L11-L12)). Gemini needs `GEMINI_API_KEY` and uses `GEMINI_MODEL` (default `gemini-3.5-flash-lite`); Groq needs `GROQ_API_KEY` and `GROQ_MODEL`. A missing value raises `ProviderConfigurationError` naming the variable, never the value ([`factory.py:19-24`](../backend/app/providers/triage/factory.py#L19-L24)). |
 | `rules` | `RuleBasedTriage` ([`rules.py`](../backend/app/providers/triage/rules.py)) | `rules` | Weighted keyword regexes per category (English and common Urdu words), ties broken by a fixed precedence, priority from `_HIGH` / `_LOW` patterns, summary is the first sentence cut to 140 characters, confidence 0.3 when nothing matched and at most 0.85 otherwise. Deterministic and has no I/O. |
 | `simulated` | `SimulatedTriage` ([`simulated.py`](../backend/app/providers/triage/simulated.py)) | `simulated` | For tests and CI. Classifies with `RuleBasedTriage`, replaces the confidence with a value derived from a SHA-256 of `seed:text` (0.50 to 0.99), and can raise scripted errors (`script=[TriageTimeout(), None]`) or fail on every call (`always_fail=...`). No network, clock or randomness. |
-| `ollama` | none | | Accepted by the settings type, but the factory raises `NotImplementedError` ([`factory.py:53-54`](../backend/app/providers/triage/factory.py#L53-L54)). There is no Ollama provider in this codebase. |
+| `ollama` | none | | Not built (issue #45). `ollama` is not an accepted `TRIAGE_PROVIDER` value, so setting it fails settings validation when the app starts rather than at the first request. `llm:ollama` remains a valid `triaged_by` value in the schema only because the spec lists it. |
 
 CI runs with `TRIAGE_PROVIDER=simulated` (`backend/tests/conftest.py`,
 `.github/workflows/ci.yml`); `k8s/overlays/prod` patches it to `llm`.
