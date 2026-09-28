@@ -33,8 +33,8 @@ rate limits, non-determinism). Frozen by
 [`backend/tests/conftest.py:4`](../backend/tests/conftest.py#L4):
 `os.environ.setdefault("TRIAGE_PROVIDER", "simulated")`, which every test process picks up unless
 something more specific overrides it first. CI sets the same variable explicitly at the job level
-too: [`.github/workflows/ci.yml:92`](../.github/workflows/ci.yml#L92) (`TRIAGE_PROVIDER:
-simulated` for `test-backend`) and `ci.yml:248` (in the `.env` the `integration` job writes).
+too: [`.github/workflows/ci.yml:94`](../.github/workflows/ci.yml#L94) (`TRIAGE_PROVIDER:
+simulated` for `test-backend`) and `ci.yml:253` (in the `.env` the `integration` job writes).
 
 ## 2. CI/CD maturity ladder
 
@@ -182,7 +182,7 @@ adds a seeded, injectable confidence and *scripted* failures — `script=[Triage
 means "fail once, then succeed," `always_fail=...` means "the provider is down" — so every failure
 mode the real LLM could exhibit is reproduced without a network call, a real clock, or real
 randomness. `TriageService` itself takes `sleep`, `jitter` and `clock` as injectable parameters
-([`backend/app/services/triage.py:41-46`](../backend/app/services/triage.py#L41-L46)), so even the
+([`backend/app/services/triage.py:46-49`](../backend/app/services/triage.py#L46-L49)), so even the
 retry-and-backoff path is tested with zero real waiting. The one live check that does exist —
 against the real Gemini API — was run manually with three throwaway complaints and is documented
 in the PR history (#27), never in the automated suite.
