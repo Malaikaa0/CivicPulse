@@ -98,9 +98,23 @@ Full interactive schema at `/docs` (Swagger UI) or `/openapi.json` once the back
 
 ## Screenshots
 
-The Submit, Dashboard, and Stats views are built (`frontend/src/pages/`) - actual screenshots
-still need capturing against a running instance and are tracked as a follow-up rather than
-guessed at here.
+Captured from the running dev stack (`docker compose up -d --build`, http://localhost:3000).
+
+**Submit** - a new complaint triaged on submit. This local run uses the deterministic `rules`
+provider (shown as "triaged by: rules"); with `TRIAGE_PROVIDER=llm` the same panel shows the
+Gemini result and `llm:gemini`.
+
+![Submit view](docs/evidence/submit.png)
+
+**Dashboard** - paginated list with category/priority/status filters. The status buttons on
+each card come from that complaint's own `allowed_transitions`.
+
+![Dashboard view](docs/evidence/dashboard.png)
+
+**Stats** - aggregates by category, priority and status. The badge shows the `X-Cache` header;
+this is the second load inside the 30 s TTL, so it's a HIT.
+
+![Stats view](docs/evidence/stats.png)
 
 ## Repository layout
 
