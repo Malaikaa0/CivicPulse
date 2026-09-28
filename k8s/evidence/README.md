@@ -40,3 +40,13 @@ machine's own temp/tooling directory - redacted in the two `k6-load-test-output*
 since it's an artifact of where the script happened to be saved, not something that says anything
 about the test or its result. Every number in these files (request counts, latencies, failure
 rate, VU counts) is untouched and exactly as k6 reported it.
+
+## Zero-downtime rollout and rollback
+
+- **`zero-downtime-rollout.txt`** - `kubectl set image` replaced both backend pods while
+  `load/rollout-load.js` sent 10 VUs of traffic through the Ingress for 120s, from inside the
+  cluster. **0 of 19087 requests failed.** Max latency was 28s (p95 217ms), recorded as-is: most
+  likely one request in flight on a draining pod.
+- **`rollback.txt`** - `kubectl rollout undo` straight after, taking all 10 replicas (the HPA
+  had scaled up under the load) back to the previous image in one command. The declarative
+  alternative, re-applying the previous SHA, is in `docs/RUNBOOK.md`.
