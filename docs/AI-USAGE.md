@@ -91,8 +91,11 @@ who typed it. This includes:
 - Directed scope and priority throughout, and made the calls that needed a human: k3d over kind,
   keeping Docker's data on C: after the D: relocation failed, dropping Ollama, and when to merge.
 - Did the merge-conflict exercise's own edit in the GitHub UI (PR #53).
-- Rotated the leaked Gemini key, created the replacement in AI Studio and set the three GitHub
-  Secrets himself (the key never passed through the AI session).
+- Rotated a Gemini key that had been pasted into an AI chat session (it was never committed:
+  a full `git log --all -p` scan for key patterns finds nothing), created the replacement in AI
+  Studio and set the three GitHub
+  Secrets himself. The replacement key was never pasted into the AI session; only its first ten
+  characters were read, to confirm it differed from the leaked one.
 - Configured `main`'s ruleset required checks and auto-merge in the GitHub UI, and took the
   red/green CI-gate and ruleset screenshots.
 - Records the demo video with his partner (not yet recorded at the time of writing; script in
@@ -102,7 +105,7 @@ who typed it. This includes:
 **What was checked and changed afterwards, and why:**
 - Two independent audit sub-agents re-checked the finished work against the spec. They found
   real problems the main session had missed or overstated: `cd.yml`'s deploy job had never
-  actually succeeded despite being described as verified (it failed four times before a secret-
+  actually succeeded despite being described as verified (it failed five times before a secret-
   ordering race was found and fixed in PR #81); ADR consequences and several engineering-notes
   answers were stale; a merge-conflict explanation was missing; CI's `tsc --noEmit` step checked
   no files at all; `release.yml` published without a `needs:` gate.

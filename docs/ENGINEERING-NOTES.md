@@ -52,19 +52,19 @@ does not reach continuous deployment, because there is no long-lived production 
 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on every PR to `main` and every
 push to `dev` ([`ci.yml:5-10`](../.github/workflows/ci.yml#L5-L10)) and has seven jobs:
 
-- `lint-and-type` ([`:23-62`](../.github/workflows/ci.yml#L23-L62)): ruff and mypy on the
+- `lint-and-type` ([`:23-64`](../.github/workflows/ci.yml#L23-L64)): ruff and mypy on the
   backend, eslint and `tsc --noEmit` on the frontend.
-- `test-backend` ([`:64-115`](../.github/workflows/ci.yml#L64-L115)): pytest against real
+- `test-backend` ([`:66-117`](../.github/workflows/ci.yml#L66-L117)): pytest against real
   `postgres:16` and `redis:7` service containers, not mocks, with `TRIAGE_PROVIDER: simulated` and
   `--cov-fail-under=65`.
-- `test-frontend` ([`:117-134`](../.github/workflows/ci.yml#L117-L134)): Vitest.
-- `build` ([`:138-174`](../.github/workflows/ci.yml#L138-L174)): builds both images with
+- `test-frontend` ([`:119-136`](../.github/workflows/ci.yml#L119-L136)): Vitest.
+- `build` ([`:140-179`](../.github/workflows/ci.yml#L140-L179)): builds both images with
   `push: false` (a PR never publishes anything) and hands them to `scan` as an artifact.
-- `scan` ([`:176-213`](../.github/workflows/ci.yml#L176-L213)): Trivy on both images,
+- `scan` ([`:181-218`](../.github/workflows/ci.yml#L181-L218)): Trivy on both images,
   `severity: HIGH,CRITICAL`, `ignore-unfixed: true`, `exit-code: "1"`.
-- `manifests` ([`:215-231`](../.github/workflows/ci.yml#L215-L231)):
+- `manifests` ([`:220-236`](../.github/workflows/ci.yml#L220-L236)):
   `kubectl kustomize k8s/overlays/prod | kubeconform -strict`.
-- `integration` ([`:235-308`](../.github/workflows/ci.yml#L235-L308)): a real
+- `integration` ([`:240-313`](../.github/workflows/ci.yml#L240-L313)): a real
   `docker compose up -d --build`, wait for `/ready`, POST a complaint, GET it back and compare the
   category, assert `X-Cache` goes MISS -> HIT, then `docker compose down -v`.
 
@@ -98,12 +98,12 @@ merging a reviewed, green PR. It has three jobs, each gated on the previous one 
    than a ClusterIP shortcut ([`:188-198`](../.github/workflows/cd.yml#L188-L198)), prints
    `kubectl get hpa`, and deletes the cluster.
 
-`release.yml` adds semver image tags and a GitHub Release with generated notes on a `v*` tag
+`release.yml` re-runs the full `ci.yml` suite as a gate (`needs: test`, [`release.yml:21-25`](../.github/workflows/release.yml#L21-L25)), then adds semver image tags and a GitHub Release with generated notes on a `v*` tag
 ([`release.yml:6-8`](../.github/workflows/release.yml#L6-L8),
-[`:41-61`](../.github/workflows/release.yml#L41-L61),
-[`:95-102`](../.github/workflows/release.yml#L95-L102)).
+[`:51-71`](../.github/workflows/release.yml#L51-L71),
+[`:95-112`](../.github/workflows/release.yml#L95-L112)).
 
-**It did not work first time.** `cd.yml` failed on its first four runs before succeeding end to
+**It did not work first time.** `cd.yml` failed on its first five runs before succeeding end to
 end, for the first time, on run
 [36345139912](https://github.com/Malaikaa0/CivicPulse/actions/runs/36345139912). The final
 blocker, fixed last, was a secret-ordering race: the committed placeholder Secret was applied first and
