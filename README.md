@@ -125,6 +125,14 @@ Measured with `du -sxm /` inside each image (uncompressed filesystem), same mach
 | frontend | 312 MB (Node 22 + `node_modules` + source) | **53 MB** (nginx 1.27-alpine is 50 MB of that) | Node, `node_modules` and source never reach the final image - only the built `dist/` |
 | backend | 263 MB (Python + venv) | **259 MB** | Very little, honestly: every dependency installs from a prebuilt wheel, so the builder has no compilers or build tools to leave behind. The split keeps pip's working files out, and the final stage adds a ~59 MB `apt-get upgrade` layer for Debian security patches (see `backend/Dockerfile`), which is why it isn't smaller |
 
+Build context (what `docker build` sends), with and without each `.dockerignore`, measured on
+the same checkout; details in each file's header comment:
+
+| Context | Without `.dockerignore` | With it | Mostly excluded |
+|---|---|---|---|
+| `backend/` | ~220 MB | ~1-2 MB | `.venv/` (~175 MB), `.mypy_cache/` (~43 MB) |
+| `frontend/` | ~99 MB | < 1 MB | `node_modules/` (~99 MB) |
+
 ## Repository layout
 
 ```
@@ -144,7 +152,7 @@ Deployment+PVC for Redis, backend/frontend Deployments with all three probes cor
 PodDisruptionBudget, HPA and VPA (both proven with real load tests, not just applied - see
 `k8s/evidence/`), and dev/prod Kustomize overlays. CI/CD (`ci.yml`/`cd.yml`/`release.yml`) is
 built and verified running for real on GitHub Actions. The frontend's real views
-(Submit/Dashboard/Stats) are built and tested (29 component tests). See
+(Submit/Dashboard/Stats) are built and tested (38 frontend tests: 34 component tests plus 4 API-contract checks). See
 `docs/ENGINEERING-NOTES.md` for the honest state of what's pending and why, and
 `docs/AI-USAGE.md` for a specific account of how AI assistance was
 used throughout.
