@@ -24,7 +24,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: frontend
-          image: ghcr.io/malaikaa0/civicpulse-frontend:latest # overridden per-environment by overlays
+          image: ghcr.io/malaikaa0/civicpulse-frontend:set-by-overlay # never deployed as-is: each overlay replaces this tag
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080

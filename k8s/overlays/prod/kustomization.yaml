@@ -1,6 +1,8 @@
 # Real cluster: images come from GHCR, addressed by an immutable commit-SHA tag (never
-# :latest), same reasoning as compose.prod.yaml/ADR-0003. `newTag: latest` here is a
-# placeholder overwritten by the CD job right before deploy:
+# :latest), same reasoning as compose.prod.yaml/ADR-0003. `newTag: set-by-cd` here is a
+# deliberately non-pullable placeholder, overwritten by the CD job right before deploy - so a
+# manual `kubectl apply -k overlays/prod` without a SHA fails loudly instead of silently
+# deploying whatever :latest happens to be:
 #   kustomize edit set image ghcr.io/malaikaa0/civicpulse-backend=ghcr.io/malaikaa0/civicpulse-backend:$SHA
 #   kustomize edit set image ghcr.io/malaikaa0/civicpulse-frontend=ghcr.io/malaikaa0/civicpulse-frontend:$SHA
 # so what actually ships is always traceable to the commit that built it.
@@ -12,9 +14,9 @@ resources:
 
 images:
   - name: ghcr.io/malaikaa0/civicpulse-backend
-    newTag: latest
+    newTag: set-by-cd
   - name: ghcr.io/malaikaa0/civicpulse-frontend
-    newTag: latest
+    newTag: set-by-cd
 
 patches:
   # Real triage, not the deterministic simulated provider CI/dev use - this is the one place

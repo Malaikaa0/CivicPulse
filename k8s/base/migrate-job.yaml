@@ -16,7 +16,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: migrate
-          image: ghcr.io/malaikaa0/civicpulse-backend:latest # overridden per-environment by overlays
+          image: ghcr.io/malaikaa0/civicpulse-backend:set-by-overlay # never deployed as-is: each overlay replaces this tag
           imagePullPolicy: IfNotPresent
           command: ["alembic", "upgrade", "head"]
           envFrom:
