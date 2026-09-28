@@ -90,7 +90,11 @@ async function parseErrorAndThrow(response: Response): Promise<never> {
     throw new ApiError(b.detail, 409, "conflict", undefined, b.current, b.requested);
   }
   if (response.status === 429) {
-    const retryAfter = Number(response.headers.get("Retry-After") ?? "0") || undefined;
+    // `Number(x) || undefined` would drop a legitimate "0" (retry immediately); only a missing,
+    // blank or non-numeric header means "unknown".
+    const header = response.headers.get("Retry-After");
+    const parsed = header === null || header.trim() === "" ? NaN : Number(header);
+    const retryAfter = Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
     const detail =
       body && typeof body === "object" && "detail" in body
         ? String((body as { detail: unknown }).detail)

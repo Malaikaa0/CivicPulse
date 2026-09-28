@@ -1,13 +1,12 @@
 # Engineering Notes
 
-Answers to spec section 5.2. Question 2 (CI/CD maturity ladder) still needs infrastructure that
-does not exist yet — no `.github/workflows/*.yml` — and is marked **PENDING** rather than guessed
-at. Question 7 is marked PENDING below for the same reason it originally was, but note that
-`compose.yaml` referenced there now exists; that answer needs revisiting rather than left as
-written. Questions 5 (HPA lag) and 6 (VPA/HPA conflict) were PENDING for the same kind of reason —
-no Kubernetes manifests existed to measure against — until the HPA, VPA, and real load tests below
-existed; both are now answered from that measurement. The rest are answered from what is actually
-built and tested today.
+Answers to spec section 5.2. All eight questions are now answered from what is actually built,
+tested and run in this repository, with file-and-line references. Questions 2 (CI/CD maturity
+ladder), 5 (HPA lag), 6 (VPA/HPA conflict) and 7 (`internal: true` and the hosted LLM) were
+originally marked PENDING because the workflows, Kubernetes manifests and `compose.yaml` they
+depend on did not exist yet; each was answered once that infrastructure existed and could be
+pointed at. The supplementary "design justifications" section at the end is complete too; E4
+(Redis AOF persistence) was the last item, answered once the volume could be tested.
 
 ---
 
@@ -33,16 +32,107 @@ actually change).
 rate limits, non-determinism). Frozen by
 [`backend/tests/conftest.py:4`](../backend/tests/conftest.py#L4):
 `os.environ.setdefault("TRIAGE_PROVIDER", "simulated")`, which every test process picks up unless
-something more specific overrides it first. CI's own workflow must set the same variable at the
-job level once `ci.yml` exists (pending, see question 2).
+something more specific overrides it first. CI sets the same variable explicitly at the job level
+too: [`.github/workflows/ci.yml:92`](../.github/workflows/ci.yml#L92) (`TRIAGE_PROVIDER:
+simulated` for `test-backend`) and `ci.yml:248` (in the `.env` the `integration` job writes).
 
-## 2. CI/CD maturity ladder — **PENDING**
+## 2. CI/CD maturity ladder
 
-No `.github/workflows/*.yml` exists yet (M2's half). This question cannot be answered honestly
-until `ci.yml` and `cd.yml` are written; a rung claimed without a workflow to point at is a guess,
-which the spec explicitly scores as zero. To complete: identify the rung from Lecture 03 slide 32
-that matches whatever `ci.yml`/`cd.yml` actually do (lint+test on PR, or +build+scan, or full
-deploy-on-merge), cite the workflow file and job names, and name the next rung.
+The ladder referred to here runs, bottom to top: builds by hand -> continuous integration (every
+change built and tested automatically) -> continuous delivery (every merge to the release branch
+produces a tested, published, deployable artifact and proves that it deploys) -> continuous
+deployment (every such merge goes to a real, long-lived production environment with no human
+step), with supply-chain hardening (immutable digests, signed images, provenance) at the top.
+
+**Rung reached: continuous delivery, with the deploy exercised against an ephemeral cluster.** It
+does not reach continuous deployment, because there is no long-lived production cluster for
+`cd.yml` to deploy to.
+
+**Evidence for continuous integration (the rung below, fully met).**
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on every PR to `main` and every
+push to `dev` ([`ci.yml:5-10`](../.github/workflows/ci.yml#L5-L10)) and has seven jobs:
+
+- `lint-and-type` ([`:23-62`](../.github/workflows/ci.yml#L23-L62)): ruff and mypy on the
+  backend, eslint and `tsc --noEmit` on the frontend.
+- `test-backend` ([`:64-115`](../.github/workflows/ci.yml#L64-L115)): pytest against real
+  `postgres:16` and `redis:7` service containers, not mocks, with `TRIAGE_PROVIDER: simulated` and
+  `--cov-fail-under=65`.
+- `test-frontend` ([`:117-134`](../.github/workflows/ci.yml#L117-L134)): Vitest.
+- `build` ([`:138-174`](../.github/workflows/ci.yml#L138-L174)): builds both images with
+  `push: false` (a PR never publishes anything) and hands them to `scan` as an artifact.
+- `scan` ([`:176-213`](../.github/workflows/ci.yml#L176-L213)): Trivy on both images,
+  `severity: HIGH,CRITICAL`, `ignore-unfixed: true`, `exit-code: "1"`.
+- `manifests` ([`:215-231`](../.github/workflows/ci.yml#L215-L231)):
+  `kubectl kustomize k8s/overlays/prod | kubeconform -strict`.
+- `integration` ([`:235-308`](../.github/workflows/ci.yml#L235-L308)): a real
+  `docker compose up -d --build`, wait for `/ready`, POST a complaint, GET it back and compare the
+  category, assert `X-Cache` goes MISS -> HIT, then `docker compose down -v`.
+
+The gate is enforced, not advisory: `main` is protected by a repository ruleset that requires all
+seven checks plus one approving review before a merge. PR #78 is the red -> green evidence: a
+deliberately failing test turned the checks red and blocked the merge button
+([`docs/evidence/cnfirm_blocked.png`](evidence/cnfirm_blocked.png)), and the fix in the same PR
+turned them green ([`docs/evidence/ci-green.png`](evidence/ci-green.png)).
+
+**Evidence for continuous delivery (the rung claimed).**
+[`.github/workflows/cd.yml`](../.github/workflows/cd.yml) runs on push to `main` only
+([`cd.yml:5-7`](../.github/workflows/cd.yml#L5-L7)), which the ruleset means can only happen by
+merging a reviewed, green PR. It has three jobs, each gated on the previous one by `needs:`:
+
+1. `test` ([`cd.yml:20-24`](../.github/workflows/cd.yml#L20-L24)) re-runs the whole of `ci.yml`
+   on the merged result via `workflow_call` ([`ci.yml:10`](../.github/workflows/ci.yml#L10)), not
+   a hand-picked subset.
+2. `build-push` (`needs: test`, [`cd.yml:29-93`](../.github/workflows/cd.yml#L29-L93)) pushes
+   both images to GHCR tagged `${{ github.sha }}` and `latest`
+   ([`:60-62`](../.github/workflows/cd.yml#L60-L62), [`:72-74`](../.github/workflows/cd.yml#L72-L74))
+   using `GITHUB_TOKEN` with `packages: write` scoped to this job only
+   ([`:32-34`](../.github/workflows/cd.yml#L32-L34)), emits a Syft SBOM per image
+   ([`:78-88`](../.github/workflows/cd.yml#L78-L88)), and exposes both image digests as job
+   outputs ([`:35-37`](../.github/workflows/cd.yml#L35-L37)).
+3. `deploy-k8s` (`needs: build-push`, [`cd.yml:98-206`](../.github/workflows/cd.yml#L98-L206))
+   pins `overlays/prod` to this commit's SHA with `kustomize edit set image`
+   ([`:115-121`](../.github/workflows/cd.yml#L115-L121)), creates a throwaway k3d cluster
+   ([`:127`](../.github/workflows/cd.yml#L127)), applies the overlay, waits on the migrate Job and
+   on `kubectl rollout status` for both Deployments
+   ([`:165-170`](../.github/workflows/cd.yml#L165-L170)), smoke-tests through the Ingress rather
+   than a ClusterIP shortcut ([`:188-198`](../.github/workflows/cd.yml#L188-L198)), prints
+   `kubectl get hpa`, and deletes the cluster.
+
+`release.yml` adds semver image tags and a GitHub Release with generated notes on a `v*` tag
+([`release.yml:6-8`](../.github/workflows/release.yml#L6-L8),
+[`:41-61`](../.github/workflows/release.yml#L41-L61),
+[`:95-102`](../.github/workflows/release.yml#L95-L102)).
+
+**It did not work first time.** `cd.yml` failed on its first four runs before succeeding end to
+end, for the first time, on run
+[36345139912](https://github.com/Malaikaa0/CivicPulse/actions/runs/36345139912). The final
+blocker, fixed last, was a secret-ordering race: the committed placeholder Secret was applied first and
+the real one patched in afterwards, so Postgres could initialise its data directory with the
+placeholder password while `DATABASE_URL` carried the real one; the migrate Job then never
+connected and backend's `/ready` never passed. PR #81 fixed it by writing the real Secret from
+GitHub Secrets into the runner's checkout *before* `kubectl apply`
+([`cd.yml:137-160`](../.github/workflows/cd.yml#L137-L160) explains the ordering in place).
+Continuous delivery is claimed on the strength of that successful run, not on the workflow file
+alone.
+
+**The next rung, and what it would buy.** Three gaps keep this below continuous deployment and
+the hardened top of the ladder:
+
+- **No persistent target.** The deploy proves the release *would* roll out on a clean cluster,
+  then throws the cluster away. Continuous deployment means every green merge to `main` actually
+  replaces what users are running on a long-lived cluster, with `kubectl rollout undo` (see
+  [`docs/RUNBOOK.md`](RUNBOOK.md)) as the one-command way back. That buys a merge-to-production
+  lead time measured in minutes, and removes the manual "go and deploy it now" step, which is
+  where most deploy mistakes happen.
+- **Deploy by digest.** `build-push` already captures the digests
+  ([`cd.yml:35-37`](../.github/workflows/cd.yml#L35-L37)), but `deploy-k8s` still deploys the
+  SHA *tag* ([`:119-120`](../.github/workflows/cd.yml#L119-L120)). A tag can in principle be
+  re-pushed; a `@sha256:` digest cannot, so deploying by digest makes "what is production
+  running?" tamper-evident (ADR-0003's stated revisit condition).
+- **Signing and provenance.** Images are not signed (for example with cosign), no admission
+  policy verifies signatures, and actions are pinned to major-version tags such as `@v4` rather
+  than commit SHAs. Signing plus a verifying admission check would mean the cluster refuses any
+  image this pipeline did not build, instead of trusting anyone who can push to GHCR.
 
 ## 3. The exact line guaranteeing build-once-deploy-many
 
@@ -271,14 +361,20 @@ for the same distributed reason at a smaller scale: two separate Redis commands 
 EXPIRE) are not atomic across two pods issuing them concurrently, and a process dying between the
 two would leave a counter key with no expiry, permanently blocking that client.
 
-**E4 — Redis AOF on a named volume, and why a cache needs persistence at all — PENDING.** This
-needs `compose.yaml` to exist (the volume declaration is M2's). The honest answer to "why does a
-cache need persistence when the whole point of a cache is that it can be rebuilt" has two sides,
-and the actual configuration should state which one this system picked: (a) the stats cache and
-the rate-limiter counters truly can be rebuilt from PostgreSQL and from a clean slate respectively,
-so AOF buys only a faster warm-up after a restart, or (b) the 24-hour content-hash triage cache
-represents real (if reproducible) work — losing it after a Redis restart means the next instance
-of every duplicate complaint costs a fresh inference again, which is the exact cost the cache
-exists to avoid. Argument (b) is the stronger one given what this Redis instance actually stores,
-but it should be confirmed once the volume is configured and can be tested by restarting the
-container and checking the cache survives.
+**E4 — Redis AOF on a named volume, and why a cache needs persistence at all.** Configured in
+all three places Redis runs: `compose.yaml:50` (`redis-server --appendonly yes`) with the
+`redisdata` named volume mounted at `/data` (`compose.yaml:19,52`), the same in
+`compose.prod.yaml:44-46`, and on Kubernetes as a Deployment with its own PVC
+(`k8s/base/redis.yaml:7,33,37`).
+
+Not everything in this Redis needs it. The stats cache (30 s TTL) is rebuilt from PostgreSQL on
+the next miss, and losing the rate-limiter counters on a restart only gives a client a fresh
+window. What does need it is the content-hash triage cache
+(`backend/app/providers/triage/caching.py:135`, 24 h TTL by default): each entry is the result of
+an LLM call. Lose those on a restart and every repeat complaint pays for a fresh inference again,
+which is the exact cost the cache exists to avoid.
+
+Tested, not assumed: a key written with `SET triage:demo ... EX 86400` into `redis:7
+--appendonly yes` on a named volume was still there after the container was deleted and
+recreated, with its TTL still counting down (86393 s left). The same test without the volume lost
+the key. AOF alone isn't enough; it has to be on a volume that outlives the container.

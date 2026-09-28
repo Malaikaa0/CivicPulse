@@ -1,0 +1,55 @@
+# Rollback (spec 3.4): the fast, imperative path - kubectl rollout undo
+# Local k3d cluster, overlays/dev, right after the rollout in zero-downtime-rollout.txt.
+# Captured 2026-09-28T05:48:57Z
+# (Consecutive identical "Waiting for rollout" progress lines collapsed with uniq; nothing else edited.)
+
+$ kubectl -n civicpulse rollout history deployment/backend
+deployment.apps/backend 
+REVISION  CHANGE-CAUSE
+1         <none>
+2         <none>
+
+$ kubectl -n civicpulse get deployment backend -o jsonpath={..image}   # before undo
+civicpulse-backend:local-v2
+
+$ kubectl -n civicpulse rollout undo deployment/backend
+Warning: resource deployments/backend was previously managed with 'kubectl apply'. Rolling back will not update the kubectl.kubernetes.io/last-applied-configuration annotation, which may cause unexpected behavior on future 'kubectl apply' operations. Consider using 'kubectl apply' with your previous configuration file instead.
+deployment.apps/backend rolled back
+$ kubectl -n civicpulse rollout status deployment/backend
+Waiting for deployment "backend" rollout to finish: 1 out of 10 new replicas have been updated...
+Waiting for deployment "backend" rollout to finish: 2 out of 10 new replicas have been updated...
+Waiting for deployment "backend" rollout to finish: 3 out of 10 new replicas have been updated...
+Waiting for deployment "backend" rollout to finish: 4 out of 10 new replicas have been updated...
+Waiting for deployment "backend" rollout to finish: 5 out of 10 new replicas have been updated...
+Waiting for deployment "backend" rollout to finish: 6 out of 10 new replicas have been updated...
+Waiting for deployment "backend" rollout to finish: 7 out of 10 new replicas have been updated...
+Waiting for deployment "backend" rollout to finish: 8 out of 10 new replicas have been updated...
+Waiting for deployment "backend" rollout to finish: 9 out of 10 new replicas have been updated...
+Waiting for deployment "backend" rollout to finish: 1 old replicas are pending termination...
+deployment "backend" successfully rolled out
+$ kubectl -n civicpulse get deployment backend -o jsonpath={..image}   # after undo
+civicpulse-backend:local
+$ kubectl -n civicpulse rollout history deployment/backend
+deployment.apps/backend 
+REVISION  CHANGE-CAUSE
+2         <none>
+3         <none>
+
+$ kubectl -n civicpulse get pods -l app=backend
+NAME                       READY   STATUS    RESTARTS   AGE
+backend-68457fb564-2gx97   1/1     Running   0          51s
+backend-68457fb564-2kl42   1/1     Running   0          35s
+backend-68457fb564-cnfjc   1/1     Running   0          42s
+backend-68457fb564-gkmcr   1/1     Running   0          83s
+backend-68457fb564-l2xdn   1/1     Running   0          19s
+backend-68457fb564-n2292   1/1     Running   0          90s
+backend-68457fb564-nq5k4   1/1     Running   0          26s
+backend-68457fb564-qxtgc   1/1     Running   0          77s
+backend-68457fb564-xdcmb   1/1     Running   0          61s
+backend-68457fb564-zzxr4   1/1     Running   0          68s
+
+# Result: back on civicpulse-backend:local in one command. Note the history: undo does not
+# go back to revision 1, it creates a new revision with revision 1's template - so the
+# cluster's history is the only record of what happened. That is why the declarative path
+# (re-apply overlays/prod pinned to the previous SHA, see docs/RUNBOOK.md) is the one to use
+# once the incident is over: git then records what is running and why.

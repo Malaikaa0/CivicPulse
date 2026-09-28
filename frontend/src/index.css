@@ -424,3 +424,7 @@ body {
   border-color: currentColor;
   font-weight: 600;
 }
+
+.required-marker {
+  color: #b91c1c;
+}

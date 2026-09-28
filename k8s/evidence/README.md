@@ -34,9 +34,18 @@ loop and why this is exactly the HPA/VPA conflict the spec warns about.
 ## A note on the raw k6 output
 
 k6 prints the local filesystem path of the script it was given at the top of its own output.
-The `.js` files themselves aren't committed (they're one-off load-test scripts, not part of the
-deployable system), and the path k6 printed at the time pointed into a local development
-machine's own temp/tooling directory - redacted in the two `k6-load-test-output*.txt` files above
+The scripts now live in `load/` (`hpa-load.js`, `rollout-load.js`); at the time of these runs
+they were saved in a local temp/tooling directory, and the path k6 printed pointed there - redacted in the two `k6-load-test-output*.txt` files above
 since it's an artifact of where the script happened to be saved, not something that says anything
 about the test or its result. Every number in these files (request counts, latencies, failure
 rate, VU counts) is untouched and exactly as k6 reported it.
+
+## Zero-downtime rollout and rollback
+
+- **`zero-downtime-rollout.txt`** - `kubectl set image` replaced both backend pods while
+  `load/rollout-load.js` sent 10 VUs of traffic through the Ingress for 120s, from inside the
+  cluster. **0 of 19087 requests failed.** Max latency was 28s (p95 217ms), recorded as-is: most
+  likely one request in flight on a draining pod.
+- **`rollback.txt`** - `kubectl rollout undo` straight after, taking all 10 replicas (the HPA
+  had scaled up under the load) back to the previous image in one command. The declarative
+  alternative, re-applying the previous SHA, is in `docs/RUNBOOK.md`.
