@@ -225,6 +225,15 @@ cluster's HPA sync period (out of scope for a namespaced HPA object) or raising 
 above what steady-state traffic needs — which is just capacity planning wearing a different hat,
 and exactly the trade-off autoscaling cannot avoid.
 
+**One thing in this capture I can't explain.** Right after the scale-out, from t=46s to t=137s,
+the HPA reported CPU at 1-3% even though k6 held a steady 40 VUs the whole time; it then jumped
+to 52% and stayed there (visible in `hpa-watch.txt` and as the dip in
+`k8s/evidence/hpa-replicas-vs-load.svg`). Plausible causes are metrics-server returning stale or
+partial readings while the two new pods had no usage history yet, or the original pods being
+restarted under load (the liveness-timeout problem noted in `k8s/base/backend.yaml`), but it was
+not diagnosed at the time, so treat the numbers in that window as unreliable rather than as a
+real drop in load.
+
 ## 6. Why VPA is in Off mode
 
 Ran the full loop against a real k3d cluster with the official Vertical Pod Autoscaler installed
