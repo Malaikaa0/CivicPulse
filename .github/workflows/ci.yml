@@ -57,9 +57,11 @@ jobs:
         working-directory: frontend
         run: npm run lint
 
+      # Against the real project configs: the root tsconfig.json only holds references, so a bare
+      # `tsc --noEmit` there type-checks no files at all and passes no matter what.
       - name: tsc --noEmit
         working-directory: frontend
-        run: npx tsc --noEmit
+        run: npx tsc -p tsconfig.app.json --noEmit && npx tsc -p tsconfig.node.json --noEmit
 
   test-backend:
     runs-on: ubuntu-latest
