@@ -1,8 +1,8 @@
 name: release
 
-# spec 3.4: on tag v* - build, push semver tags, generate release notes. A tag is pushed after
-# main has already gone through cd.yml on the merge that produced it, so this does not re-run the
-# full test suite - it packages and publishes what was already tested and deployed.
+# spec 3.4: on tag v* - test, then build, push semver tags, generate release notes. Publishing is
+# gated on the full ci.yml suite (the `test` job), because nothing stops a tag being pushed on a
+# commit that never went through cd.yml.
 on:
   push:
     tags: ["v*"]
@@ -15,7 +15,17 @@ env:
   FRONTEND_IMAGE: ghcr.io/malaikaa0/civicpulse-frontend
 
 jobs:
+  # A tag can point at any commit, not only one that already went through cd.yml, so the full
+  # ci.yml suite runs again on exactly what is being released. needs: below makes publishing wait
+  # for it (spec 3.4: needs: on every publishing job).
+  test:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+      security-events: write
+
   build-push-tag:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read

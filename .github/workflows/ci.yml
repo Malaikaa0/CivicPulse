@@ -136,6 +136,9 @@ jobs:
   # Builds both images and hands them to the `scan` job as artifacts. Does NOT push - spec 3.4 is
   # explicit that a PR must not publish artifacts; only cd.yml (on push to main) pushes to GHCR.
   build:
+    # Doesn't publish anything, but there's no point building and scanning images from code that
+    # already fails lint or tests.
+    needs: [lint-and-type, test-backend, test-frontend]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
