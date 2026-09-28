@@ -15,6 +15,10 @@ networks:
     internal: true
 
 volumes:
+  # Two named volumes, not the three the spec sketches: the third (ollama_models, for Ollama's
+  # model weights) belongs to the offline OllamaTriage provider, which this team evaluated and
+  # deliberately did not build (issue #45). Adding an unused volume just to hit a count would be
+  # cargo cult - each volume here holds data something actually reads back.
   pgdata: # PostgreSQL's data directory. The durable one: this is the system of record.
   redisdata: # AOF persistence. See docs/ENGINEERING-NOTES.md ("E4") for why a cache has this.
 
