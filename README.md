@@ -116,6 +116,15 @@ this is the second load inside the 30 s TTL, so it's a HIT.
 
 ![Stats view](docs/evidence/stats.png)
 
+## Image sizes
+
+Measured with `du -sxm /` inside each image (uncompressed filesystem), same machine and commit:
+
+| Image | Builder stage | Final image | What the split removes |
+|---|---|---|---|
+| frontend | 312 MB (Node 22 + `node_modules` + source) | **53 MB** (nginx 1.27-alpine is 50 MB of that) | Node, `node_modules` and source never reach the final image - only the built `dist/` |
+| backend | 263 MB (Python + venv) | **259 MB** | Very little, honestly: every dependency installs from a prebuilt wheel, so the builder has no compilers or build tools to leave behind. The split keeps pip's working files out, and the final stage adds a ~59 MB `apt-get upgrade` layer for Debian security patches (see `backend/Dockerfile`), which is why it isn't smaller |
+
 ## Repository layout
 
 ```
