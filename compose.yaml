@@ -3,7 +3,7 @@
 #
 # Network segmentation (spec 3.2): frontend can never reach postgres or redis directly. Only
 # backend bridges edge and internal, because it is the one service both sides need to talk to.
-#   docker compose exec frontend ping database   -> must fail (no route: different network,
+#   docker compose exec frontend ping postgres   -> must fail (no route: different network,
 #                                                    and internal:true blocks anything outside
 #                                                    the two networks Docker composes for it)
 #   docker compose exec frontend wget backend:8000/health -> works (both join edge)

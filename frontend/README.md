@@ -10,7 +10,7 @@ npm run dev
 ```
 
 `npm run dev` talks directly to `http://localhost:5173`; API calls (`/api/...`) need a backend
-reachable at that same origin, or use `docker compose up` once `compose.yaml` exists.
+reachable at that same origin, or use `docker compose up -d --build` from the repo root.
 
 ## Runtime configuration (ADR-0002)
 
