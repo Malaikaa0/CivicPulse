@@ -128,13 +128,16 @@ function SubmitPage() {
 
       <form className="submit-form" onSubmit={handleSubmit} noValidate>
         <div className="field">
-          <label htmlFor="submit-text">Description</label>
+          <label htmlFor="submit-text">
+            Description<span className="required-marker" aria-hidden="true"> *</span>
+          </label>
           <textarea
             id="submit-text"
             name="text"
             rows={5}
             value={values.text}
             disabled={submitting}
+            aria-required="true"
             aria-invalid={fieldError("text") ? true : undefined}
             aria-describedby={fieldError("text") ? "submit-text-error" : undefined}
             onChange={(event) => updateField("text", event.target.value)}
@@ -148,13 +151,16 @@ function SubmitPage() {
         </div>
 
         <div className="field">
-          <label htmlFor="submit-location">Location</label>
+          <label htmlFor="submit-location">
+            Location<span className="required-marker" aria-hidden="true"> *</span>
+          </label>
           <input
             id="submit-location"
             name="location"
             type="text"
             value={values.location}
             disabled={submitting}
+            aria-required="true"
             aria-invalid={fieldError("location") ? true : undefined}
             aria-describedby={fieldError("location") ? "submit-location-error" : undefined}
             onChange={(event) => updateField("location", event.target.value)}
