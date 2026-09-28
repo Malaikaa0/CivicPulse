@@ -182,7 +182,7 @@ jobs:
           kubectl -n civicpulse logs statefulset/postgres --tail=40 || true
 
       # Through the Ingress, exactly like a real user - not a Service ClusterIP shortcut. Only
-      # hits /health and / (liveness-level checks): a real triage call through overlays/prod's
+      # hits /api/stats and / (no triage call): a real triage call through overlays/prod's
       # TRIAGE_PROVIDER=llm would spend the real Gemini quota on every merge to main, which is a
       # cost/flakiness trade-off this smoke test deliberately does not make.
       - name: Smoke test through the Ingress
