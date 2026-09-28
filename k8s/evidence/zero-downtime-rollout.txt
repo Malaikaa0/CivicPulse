@@ -1,0 +1,54 @@
+# Zero-downtime rollout (spec 3.3): steady load through the Ingress while every backend pod is replaced
+# Local k3d cluster, overlays/dev. Load: load/rollout-load.js, 10 VUs for 120s, run inside the cluster.
+# Captured 2026-09-28T05:44:52Z
+
+$ kubectl -n civicpulse get deployment backend -o jsonpath={..image}
+civicpulse-backend:local
+$ kubectl -n civicpulse get pods -l app=backend   # before
+NAME                       READY   STATUS    RESTARTS   AGE
+backend-68457fb564-5j9mf   1/1     Running   0          30s
+backend-68457fb564-f94hx   1/1     Running   0          30s
+
+# k6 running (20s in). Rolling out a new backend image now:
+$ kubectl -n civicpulse set image deployment/backend backend=civicpulse-backend:local-v2
+deployment.apps/backend image updated
+$ kubectl -n civicpulse rollout status deployment/backend
+Waiting for deployment "backend" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "backend" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "backend" rollout to finish: 1 out of 2 new replicas have been updated...
+Waiting for deployment "backend" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "backend" rollout to finish: 1 old replicas are pending termination...
+Waiting for deployment "backend" rollout to finish: 1 old replicas are pending termination...
+deployment "backend" successfully rolled out
+$ kubectl -n civicpulse get pods -l app=backend   # after
+NAME                       READY   STATUS        RESTARTS   AGE
+backend-6578dfb897-jm6nt   1/1     Running       0          14s
+backend-6578dfb897-llv6t   1/1     Running       0          7s
+backend-68457fb564-f94hx   1/1     Terminating   0          93s
+
+# k6 summary (the full 120s run, spanning the whole rollout above):
+$ kubectl -n civicpulse logs k6
+     checks.........................: 100.00% 19087 out of 19087
+     data_received..................: 4.2 MB  28 kB/s
+     data_sent......................: 2.2 MB  15 kB/s
+     http_req_blocked...............: avg=21.19µs  min=2.4µs  med=7.8µs    max=14.26ms  p(90)=11.8µs   p(95)=15.7µs  
+     http_req_connecting............: avg=162ns    min=0s     med=0s       max=683.79µs p(90)=0s       p(95)=0s      
+     http_req_duration..............: avg=76.75ms  min=5.95ms med=33.97ms  max=28.17s   p(90)=164.27ms p(95)=217.06ms
+       { expected_response:true }...: avg=76.75ms  min=5.95ms med=33.97ms  max=28.17s   p(90)=164.27ms p(95)=217.06ms
+   ✓ http_req_failed................: 0.00%   0 out of 19087
+     http_req_receiving.............: avg=379.04µs min=22.2µs med=131.62µs max=94.46ms  p(90)=417.61µs p(95)=1.05ms  
+     http_req_sending...............: avg=76.9µs   min=6.7µs  med=23.1µs   max=24.2ms   p(90)=78.35µs  p(95)=126.61µs
+     http_req_tls_handshaking.......: avg=0s       min=0s     med=0s       max=0s       p(90)=0s       p(95)=0s      
+     http_req_waiting...............: avg=76.29ms  min=5.83ms med=33.43ms  max=28.17s   p(90)=164.03ms p(95)=216.81ms
+     http_reqs......................: 19087   129.098291/s
+     iteration_duration.............: avg=62.81ms  min=6.15ms med=34.75ms  max=614.42ms p(90)=164.51ms p(95)=216.43ms
+     iterations.....................: 19087   129.098291/s
+     vus............................: 10      min=10             max=10
+     vus_max........................: 10      min=10             max=10
+running (2m27.8s), 00/10 VUs, 19087 complete and 0 interrupted iterations
+steady ✓ [ 100% ] 10 VUs  2m0s
+
+# Result: 0 of 19087 requests failed while both backend pods were replaced.
+# Honest caveat: max latency was 28.17s (p95 217ms). Most likely one request in flight on an
+# old pod while it drained during preStop + graceful shutdown - it still returned 200, but it
+# was slow. Worth investigating if the latency budget matters, not just the error budget.
