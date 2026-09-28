@@ -218,4 +218,33 @@ describe("DashboardPage", () => {
       expect(cardAlert).toHaveTextContent(conflictMessage);
     });
   });
+
+  it("ignores a status change that finishes after the dashboard has unmounted", async () => {
+    let resolveChange: (value: Response) => void = () => {};
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(pageResponse([makeComplaint()]))
+      .mockReturnValueOnce(
+        new Promise<Response>((resolve) => {
+          resolveChange = resolve;
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { unmount } = render(<DashboardPage />);
+    fireEvent.click(await screen.findByRole("button", { name: /mark as in progress/i }));
+    unmount();
+
+    // The request resolves after the user has already navigated away.
+    resolveChange(
+      new Response(JSON.stringify(makeComplaint({ status: "in_progress", allowed_transitions: [] })), {
+        status: 200,
+      }),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(consoleError).not.toHaveBeenCalled();
+  });
 });
