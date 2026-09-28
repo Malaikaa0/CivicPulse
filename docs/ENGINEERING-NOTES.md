@@ -275,7 +275,7 @@ backend:
   networks: [edge, internal]   # the only service that bridges both
 ```
 
-(`compose.yaml:95`, mirrored in `compose.prod.yaml`). `edge` is a plain bridge network (reaches
+(`compose.yaml:99`, mirrored in `compose.prod.yaml`). `edge` is a plain bridge network (reaches
 the outside world, including Gemini's API), `internal` is `internal: true` (no route out at all).
 `postgres` and `redis` are `internal`-only — they can talk to `backend`, `backend` can talk out
 through `edge`, and `frontend` (which only joins `edge`) can reach neither database directly.
@@ -362,8 +362,8 @@ EXPIRE) are not atomic across two pods issuing them concurrently, and a process 
 two would leave a counter key with no expiry, permanently blocking that client.
 
 **E4 — Redis AOF on a named volume, and why a cache needs persistence at all.** Configured in
-all three places Redis runs: `compose.yaml:50` (`redis-server --appendonly yes`) with the
-`redisdata` named volume mounted at `/data` (`compose.yaml:19,52`), the same in
+all three places Redis runs: `compose.yaml:54` (`redis-server --appendonly yes`) with the
+`redisdata` named volume mounted at `/data` (`compose.yaml:23,56`), the same in
 `compose.prod.yaml:44-46`, and on Kubernetes as a Deployment with its own PVC
 (`k8s/base/redis.yaml:7,33,37`).
 
@@ -378,3 +378,7 @@ Tested, not assumed: a key written with `SET triage:demo ... EX 86400` into `red
 --appendonly yes` on a named volume was still there after the container was deleted and
 recreated, with its TTL still counting down (86393 s left). The same test without the volume lost
 the key. AOF alone isn't enough; it has to be on a volume that outlives the container.
+
+The spec's third named volume, `ollama_models`, is intentionally absent: it exists to cache the
+Ollama provider's model weights, and that provider was evaluated and not built (issue #45;
+`factory.py:53-54` raises `NotImplementedError` for it). `compose.yaml:18-21` records the same.
