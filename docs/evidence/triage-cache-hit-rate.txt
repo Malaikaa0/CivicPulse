@@ -1,0 +1,29 @@
+# Triage cache hit-rate measurement, captured 2026-09-28T21:29:23+0500
+# Dev compose stack, provider: simulated
+counters before: {'hits': 0, 'misses': 2, 'hit_rate': 0.0}
+
+ 1 neighbour 201 category=water        triaged_by=rules
+ 2 neighbour 201 category=water        triaged_by=rules
+ 3 neighbour 201 category=water        triaged_by=rules
+ 4 neighbour 201 category=water        triaged_by=rules
+ 5 neighbour 201 category=water        triaged_by=rules
+ 6 neighbour 201 category=water        triaged_by=rules
+ 7 neighbour 201 category=water        triaged_by=rules
+ 8 neighbour 201 category=water        triaged_by=rules
+ 9 neighbour 201 category=water        triaged_by=rules
+10 distinct  201 category=streetlights triaged_by=rules
+# (waiting 62s: POST /api/complaints is rate-limited to 10 per 60s per client)
+11 distinct  201 category=sanitation   triaged_by=rules
+12 distinct  201 category=roads        triaged_by=rules
+13 distinct  201 category=electricity  triaged_by=rules
+14 distinct  201 category=sanitation   triaged_by=rules
+15 distinct  201 category=other        triaged_by=rules
+16 distinct  201 category=water        triaged_by=rules
+17 distinct  201 category=sanitation   triaged_by=rules
+18 distinct  201 category=electricity  triaged_by=rules
+19 distinct  201 category=sanitation   triaged_by=rules
+20 distinct  201 category=water        triaged_by=rules
+
+counters after:  {'hits': 8, 'misses': 14, 'hit_rate': 0.36363636363636365}
+this run: 8 hits, 12 misses over 20 submissions -> hit rate 40%
+expected if normalisation + redaction work: 9 neighbours = 1 miss + 8 hits; 11 distinct = 11 misses -> 8/20 = 40%

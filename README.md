@@ -100,8 +100,9 @@ Full interactive schema at `/docs` (Swagger UI) or `/openapi.json` once the back
 
 Captured from the running dev stack (`docker compose up -d --build`, http://localhost:3000).
 
-**Submit** - a new complaint triaged on submit. This local run uses the deterministic `rules`
-provider (shown as "triaged by: rules"); with `TRIAGE_PROVIDER=llm` the same panel shows the
+**Submit** - a new complaint triaged on submit. This local run uses `TRIAGE_PROVIDER=simulated`,
+the deterministic stand-in for the rules provider, which is recorded as "triaged by: rules"
+(`backend/app/services/triage.py:23-25`); with `TRIAGE_PROVIDER=llm` the same panel shows the
 Gemini result and `llm:gemini`.
 
 ![Submit view](docs/evidence/submit.png)

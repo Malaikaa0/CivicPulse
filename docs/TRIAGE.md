@@ -147,6 +147,24 @@ sits between `TriageService` and the provider:
 `triaged_by` on a cache hit is still the wrapped provider's name, because `CachingTriage` copies
 it ([`caching.py:82-83`](../backend/app/providers/triage/caching.py#L82-L83)).
 
+### Measured hit rate
+
+Measured against the running dev stack with `docs/evidence/triage-cache-hit-rate.txt` as the
+raw capture, using the scenario spec 2.5 describes: nine neighbours report the same burst water
+main, each with different casing, spacing and phone number, plus eleven unrelated complaints.
+Counters were read from `GET /api/meta/providers` before and after:
+
+**8 hits, 12 misses over 20 submissions: a 40% hit rate.** All nine neighbour reports shared one
+cache key (normalisation folds case and whitespace, redaction replaces the phone numbers before
+hashing), so they cost one triage call instead of nine; each distinct complaint was a miss, as
+it should be. The number depends entirely on how much duplication the traffic has - 40% is a
+property of this scenario, not a prediction for real load.
+
+One caveat on the counter itself: a call that is retried after a timeout goes through
+`CachingTriage.triage` twice, so it records two misses. That under-reports the hit rate slightly
+whenever the hosted model is timing out; it didn't affect this run (no retries, simulated
+provider).
+
 ## PII redaction
 
 `redact_pii` ([`backend/app/providers/triage/redaction.py`](../backend/app/providers/triage/redaction.py))
