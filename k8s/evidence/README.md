@@ -23,13 +23,15 @@ lag analysis these logs support.
 
 - **`vpa-recommendation.txt`** - `kubectl describe vpa backend-vpa` output captured during the
   load test above: `Target: cpu: 587m` against a guessed `250m` request.
-- **`hpa-watch-after-vpa-update.txt`** / **`k6-load-test-output-after-vpa-update.txt`** - the same
-  load test re-run after updating `backend.yaml`'s request to match the VPA recommendation
-  (`600m`). Peak reported HPA utilization dropped from 101% (4 replicas) to 84% (3 replicas) for
-  the same offered load - the request denominator changed, not the real CPU usage.
+- **`hpa-watch-after-vpa-update.txt`** / **`k6-load-test-output-after-vpa-update.txt`** - a load
+  test re-run after raising the request to `600m` (and the limit from `500m` to `1`). Peak HPA
+  utilization went from 101% (4 replicas) to 84% (3 replicas), but the runs were not identical:
+  the second was shorter and, with CPU throttling gone, served ~1.9x the throughput (30.8 vs 16.2
+  req/s). So each pod did about twice the work before the HPA reacted; the request change and the
+  limit change can't be separated from this pair of runs.
 
-See question 6 in `docs/ENGINEERING-NOTES.md` for the full record→test→describe→update→retest
-loop and why this is exactly the HPA/VPA conflict the spec warns about.
+See question 6 in `docs/ENGINEERING-NOTES.md` for the full loop, what these runs do and don't
+show, and why VPA stays in Off mode alongside the HPA.
 
 ## A note on the raw k6 output
 

@@ -240,28 +240,39 @@ Ran the full loop against a real k3d cluster with the official Vertical Pod Auto
    more than 2x for this load pattern.
 4. **Updated `backend.yaml`'s requests to `cpu: 600m`** (limits raised to `1` core to keep headroom
    above the new request) — memory left at `256Mi`.
-5. **Re-ran the same load test against the updated Deployment and reported what changed about HPA
-   behaviour** — this is the interesting part, and it's the feedback loop the spec warns about,
-   caught in the act rather than just described:
+5. **Re-ran a load test against the updated Deployment and compared HPA behaviour.** The
+   honest version of the result, because the two runs were *not* identical:
 
-   | | requests.cpu: 250m (before) | requests.cpu: 600m (after) |
+   | | Before (`requests: 250m`, `limits: 500m`) | After (`requests: 600m`, `limits: 1`) |
    |---|---|---|
+   | Load script | `load/hpa-load.js`, 40 VUs, 4 min | a shorter copy, 40 VUs, 2 min 30 s |
+   | Throughput actually served | 16.2 req/s (3900 requests) | 30.8 req/s (4615 requests) |
    | Peak reported utilisation | 101%/60% (`k8s/evidence/hpa-watch.txt`) | 84%/60% (`k8s/evidence/hpa-watch-after-vpa-update.txt`) |
-   | Peak replicas for the *same* offered load | 4 | 3 |
+   | Approx. CPU per pod at that peak | 101% x 250m = ~253m | 84% x 600m = ~504m |
+   | Peak replicas | 4 | 3 |
 
-   The real CPU the backend burned under identical traffic didn't change — only the denominator
-   did. A bigger request makes the exact same usage read as a smaller percentage, so the HPA
-   scaled less aggressively for equal load. That is precisely the mechanism the spec's warning
-   describes: if VPA had been running in **Auto** mode instead of Off, it would have pushed
-   `backend.yaml`'s request up right after step 3's measurement, which — as just demonstrated —
-   lowers computed utilisation on its own, which tells the HPA to scale *in*, which raises
-   per-pod load on the smaller replica count, which pushes VPA's next recommendation back up
-   again. Two controllers, one signal (CPU), each reacting to a number the other one just moved.
-   Recommender-only mode breaks the loop at the one point that can't fight back: `kubectl describe
-   vpa` produces a number, a person reads it and decides whether the trade-off (more headroom per
-   pod vs. a less sensitive autoscaler) is worth taking, and only then does a new commit change
-   `resources.requests`. The record→test→describe→update→retest loop above *is* that human
-   decision, made once, on purpose, instead of continuously and automatically.
+   What this does show: after the change, each pod did roughly **twice the work** (and about twice
+   the CPU) before the HPA reacted, so it scaled to fewer replicas while serving nearly double the
+   throughput. What it does *not* cleanly show is "same load, only the denominator changed" -
+   an earlier draft of this answer claimed that, and the numbers don't support it. k6's
+   constant-VU model is closed-loop: the faster the backend answers, the more requests the same
+   40 VUs send. Raising the **limit** from 500m to 1 core stopped the CPU throttling that had
+   pushed p95 latency to 3.49 s in the first run, so the same VUs generated far more traffic. The
+   request change (the HPA's denominator) and the limit change (the throttling ceiling) happened
+   together, so this pair of runs can't separate their effects. A clean comparison would change
+   only `requests`, keep the limit fixed, and use an open-loop arrival rate
+   (`constant-arrival-rate`) so offered load is the same in both runs.
+
+   **Why VPA stays in Off mode** doesn't depend on that experiment; it follows from the
+   arithmetic. The HPA computes utilisation as usage / request. In **Auto** mode, VPA would raise
+   the request after a busy period; the same usage then reads as a lower percentage, so the HPA
+   scales *in*; fewer pods means more load per pod, so VPA's next recommendation goes up again.
+   Two controllers act on the same signal (CPU), each reacting to a number the other just moved.
+   Recommender-only mode breaks the loop at the one point that can't fight back:
+   `kubectl describe vpa` produces a number, a person decides whether the trade-off (more headroom
+   per pod vs. a less sensitive autoscaler) is worth it, and only then does a commit change
+   `resources.requests`. The record, test, describe, update, retest loop above *is* that human
+   decision, made once and on purpose.
 
 ## 7. `internal: true` and the hosted LLM
 
