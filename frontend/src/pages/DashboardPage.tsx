@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Category, Complaint, ListComplaintsParams, Priority, Status } from "../api/client";
 import { ApiError, changeComplaintStatus, listComplaints } from "../api/client";
 
@@ -45,6 +45,16 @@ function DashboardPage() {
   const [loadState, setLoadState] = useState<LoadState>({ status: "loading" });
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [transitionErrors, setTransitionErrors] = useState<Record<string, string>>({});
+  // Status changes outlive the render that started them; a user can switch tabs while one is in
+  // flight. Same idea as the `cancelled` flag in fetchPage, but for the whole component.
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const fetchPage = useCallback((targetPage: number, targetFilters: Filters) => {
     setLoadState({ status: "loading" });
@@ -100,9 +110,11 @@ function DashboardPage() {
 
     changeComplaintStatus(complaint.id, nextStatus)
       .then((updated) => {
+        if (!mounted.current) return;
         setComplaints((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
       })
       .catch((error: unknown) => {
+        if (!mounted.current) return;
         const message =
           error instanceof ApiError && error.kind === "conflict"
             ? error.message
@@ -112,6 +124,7 @@ function DashboardPage() {
         setTransitionErrors((prev) => ({ ...prev, [complaint.id]: message }));
       })
       .finally(() => {
+        if (!mounted.current) return;
         setPendingIds((prev) => {
           const next = new Set(prev);
           next.delete(complaint.id);
