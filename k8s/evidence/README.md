@@ -4,17 +4,24 @@ Captured against a real local k3d cluster (`civicpulse`, 1 server + 1 agent, met
 pre-installed), running the `k8s/overlays/dev` manifests with images built from this repo's own
 Dockerfiles and imported into the cluster - not a simulation.
 
-- **`hpa-watch.txt`** - raw `kubectl -n civicpulse get hpa backend-hpa -w` output for the
-  duration of the load test below. Shows `REPLICAS` rising from 2 to 4 as `cpu` utilization
-  crosses the 60% target, and falling CPU% once the extra replicas spread the load.
-- **`k6-load-test-output.txt`** - raw output of the k6 load test that generated the load: a
-  ramping-VUs scenario against `GET /api/complaints` (0 -> 40 VUs over 30s, held at 40 VUs for
-  180s, ramped back to 0 over 30s). Final summary: 3900 requests, **0 failed** (0.00%), p95
-  latency 3.49s at the peak of the burst (baseline is well under 1s) - the two original replicas
-  degraded gracefully rather than dropping requests while the HPA reacted.
-- **`hpa-replicas-vs-load.svg`** - replicas vs. offered load (VUs) over time, plotted directly
-  from the two files above (every data point in it is a real observation, not illustrative). CPU%
-  is included as a thin reference line. Open it in a browser or image viewer.
+- **`hpa-watch.txt`** - raw `kubectl -n civicpulse get hpa backend-hpa -w` output from a run
+  on 2026-09-29, plus a follow-up `kubectl get hpa`/`kubectl get events` check once the watch had
+  been left running. Shows `REPLICAS` rising from 2 to 3 as `cpu` utilization crosses the 60%
+  target, then falling back to 2 once the default 5-minute scale-down stabilization window
+  elapsed with CPU below target the whole time.
+- **`k6-load-test-output.txt`** - raw output of the k6 load test that generated the load: the
+  same `load/hpa-load.js` ramping-VUs scenario against `GET /api/complaints` (0 -> 40 VUs over
+  30s, held at 40 VUs for 180s, ramped back to 0 over 30s). Final summary: 17326 requests, **0
+  failed** (0.00%), avg latency 486ms, p95 748ms - well under the p95 3.49s seen in an earlier
+  capture of the same test, so three replicas kept up comfortably rather than degrading.
+- **`hpa-replicas-vs-load.svg`** - replicas vs. offered load (VUs) over time, regenerated from
+  `hpa-watch.txt`. The blue replicas line and its markers are real observations; the green
+  offered-load trapezoid is the k6 script's known ramp design (0/30/210/240s), not a per-second
+  capture, since this run's k6 output only kept the final summary, not the progress log. The
+  x-axis assumes a 15s HPA poll interval (the actual watch output doesn't carry per-line
+  timestamps); the final "back to 2 replicas" point is real but was confirmed separately, about
+  9.5 minutes after the run started - see the note on the chart. Open it in a browser or image
+  viewer.
 
 See [`docs/ENGINEERING-NOTES.md`](../../docs/ENGINEERING-NOTES.md) question 5 for the
 lag analysis these logs support.

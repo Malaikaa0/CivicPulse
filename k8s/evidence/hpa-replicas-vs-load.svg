@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 420" font-family="Segoe UI, Arial, sans-serif">
 <rect width="760" height="420" fill="#ffffff"/>
-<line x1="60" y1="30" x2="60" y2="370" stroke="#333" stroke-width="1.5"/>
-<line x1="60" y1="370" x2="700" y2="370" stroke="#333" stroke-width="1.5"/>
+<line x1="60" y1="20" x2="60" y2="370" stroke="#333" stroke-width="1.5"/>
+<line x1="60" y1="370" x2="740" y2="370" stroke="#333" stroke-width="1.5"/>
 <line x1="60" y1="370.0" x2="700" y2="370.0" stroke="#eee" stroke-width="1"/>
 <text x="50" y="374.0" font-size="11" fill="#333" text-anchor="end">0</text>
 <line x1="60" y1="302.0" x2="700" y2="302.0" stroke="#eee" stroke-width="1"/>
@@ -22,45 +22,45 @@
 <text x="710" y="34.0" font-size="11" fill="#333" text-anchor="start">40</text>
 <text x="746" y="200.0" font-size="12" fill="#059669" font-weight="600" text-anchor="middle" transform="rotate(90 746 200.0)">Offered load (VUs)</text>
 <text x="60.0" y="390" font-size="11" fill="#333" text-anchor="middle">0s</text>
-<text x="140.0" y="390" font-size="11" fill="#333" text-anchor="middle">40s</text>
-<text x="220.0" y="390" font-size="11" fill="#333" text-anchor="middle">80s</text>
-<text x="300.0" y="390" font-size="11" fill="#333" text-anchor="middle">120s</text>
-<text x="380.0" y="390" font-size="11" fill="#333" text-anchor="middle">160s</text>
-<text x="460.0" y="390" font-size="11" fill="#333" text-anchor="middle">200s</text>
-<text x="540.0" y="390" font-size="11" fill="#333" text-anchor="middle">240s</text>
-<text x="620.0" y="390" font-size="11" fill="#333" text-anchor="middle">280s</text>
-<text x="700.0" y="390" font-size="11" fill="#333" text-anchor="middle">320s</text>
-<text x="380.0" y="412" font-size="12" fill="#333" text-anchor="middle">Seconds since load test started</text>
-<polyline points="60.0,370.0 120.0,30.0 480.0,30.0 540.0,370.0 700.0,370.0" fill="none" stroke="#059669" stroke-width="2.5" stroke-dasharray="5,3"/>
-<polyline points="62.0,302.0 92.0,302.0 92.0,302.0 122.0,302.0 122.0,302.0 152.0,302.0 152.0,234.0 182.0,234.0 182.0,234.0 212.0,234.0 212.0,234.0 242.0,234.0 242.0,234.0 274.0,234.0 274.0,234.0 304.0,234.0 304.0,234.0 334.0,234.0 334.0,234.0 364.0,234.0 364.0,234.0 394.0,234.0 394.0,234.0 454.0,234.0 454.0,234.0 484.0,234.0 484.0,234.0 514.0,234.0 514.0,234.0 544.0,234.0 544.0,234.0 574.0,234.0 574.0,234.0 604.0,234.0 604.0,234.0 634.0,234.0 634.0,234.0 664.0,234.0 664.0,234.0 694.0,234.0 694.0,234.0" fill="none" stroke="#2563eb" stroke-width="3"/>
-<circle cx="62.0" cy="302.0" r="3" fill="#2563eb"/>
+<text x="124.0" y="390" font-size="11" fill="#333" text-anchor="middle">60s</text>
+<text x="188.0" y="390" font-size="11" fill="#333" text-anchor="middle">120s</text>
+<text x="252.0" y="390" font-size="11" fill="#333" text-anchor="middle">180s</text>
+<text x="316.0" y="390" font-size="11" fill="#333" text-anchor="middle">240s</text>
+<text x="380.0" y="390" font-size="11" fill="#333" text-anchor="middle">300s</text>
+<text x="444.0" y="390" font-size="11" fill="#333" text-anchor="middle">360s</text>
+<text x="508.0" y="390" font-size="11" fill="#333" text-anchor="middle">420s</text>
+<text x="572.0" y="390" font-size="11" fill="#333" text-anchor="middle">480s</text>
+<text x="636.0" y="390" font-size="11" fill="#333" text-anchor="middle">540s</text>
+<text x="700.0" y="390" font-size="11" fill="#333" text-anchor="middle">600s</text>
+<text x="380.0" y="412" font-size="12" fill="#333" text-anchor="middle">Approx. seconds since watch start (assumes 15s HPA poll interval; final point confirmed separately, ~9.5 min later)</text>
+<polyline points="60.0,370.0 92.0,30.0 284.0,30.0 316.0,370.0 700.0,370.0" fill="none" stroke="#059669" stroke-width="2.5" stroke-dasharray="5,3"/>
+<polyline points="60.0,302.0 76.0,302.0 76.0,302.0 92.0,302.0 92.0,302.0 108.0,302.0 108.0,302.0 124.0,302.0 124.0,268.0 140.0,268.0 140.0,268.0 156.0,268.0 156.0,268.0 172.0,268.0 172.0,268.0 188.0,268.0 188.0,268.0 204.0,268.0 204.0,268.0 220.0,268.0 220.0,268.0 236.0,268.0 236.0,268.0 252.0,268.0 252.0,268.0 268.0,268.0 268.0,268.0 284.0,268.0 284.0,268.0 300.0,268.0 300.0,268.0 316.0,268.0 316.0,268.0 666.9,268.0 666.9,268.0 668.0,268.0 668.0,302.0 700.0,302.0" fill="none" stroke="#2563eb" stroke-width="3"/>
+<circle cx="60.0" cy="302.0" r="3" fill="#2563eb"/>
+<circle cx="76.0" cy="302.0" r="3" fill="#2563eb"/>
 <circle cx="92.0" cy="302.0" r="3" fill="#2563eb"/>
-<circle cx="122.0" cy="302.0" r="3" fill="#2563eb"/>
-<circle cx="152.0" cy="234.0" r="3" fill="#2563eb"/>
-<circle cx="182.0" cy="234.0" r="3" fill="#2563eb"/>
-<circle cx="212.0" cy="234.0" r="3" fill="#2563eb"/>
-<circle cx="242.0" cy="234.0" r="3" fill="#2563eb"/>
-<circle cx="274.0" cy="234.0" r="3" fill="#2563eb"/>
-<circle cx="304.0" cy="234.0" r="3" fill="#2563eb"/>
-<circle cx="334.0" cy="234.0" r="3" fill="#2563eb"/>
-<circle cx="364.0" cy="234.0" r="3" fill="#2563eb"/>
-<circle cx="394.0" cy="234.0" r="3" fill="#2563eb"/>
-<circle cx="454.0" cy="234.0" r="3" fill="#2563eb"/>
-<circle cx="484.0" cy="234.0" r="3" fill="#2563eb"/>
-<circle cx="514.0" cy="234.0" r="3" fill="#2563eb"/>
-<circle cx="544.0" cy="234.0" r="3" fill="#2563eb"/>
-<circle cx="574.0" cy="234.0" r="3" fill="#2563eb"/>
-<circle cx="604.0" cy="234.0" r="3" fill="#2563eb"/>
-<circle cx="634.0" cy="234.0" r="3" fill="#2563eb"/>
-<circle cx="664.0" cy="234.0" r="3" fill="#2563eb"/>
-<circle cx="694.0" cy="234.0" r="3" fill="#2563eb"/>
-<polyline points="62.0,363.8 92.0,308.2 122.0,57.8 152.0,363.8 182.0,363.8 212.0,366.9 242.0,363.8 274.0,363.8 304.0,360.7 334.0,360.7 364.0,209.3 394.0,209.3 454.0,209.3 484.0,212.4 514.0,209.3 544.0,209.3 574.0,274.2 604.0,363.8 634.0,360.7 664.0,360.7 694.0,357.6" fill="none" stroke="#ea580c" stroke-width="1.5" opacity="0.7"/>
-<line x1="60" y1="184.5" x2="700" y2="184.5" stroke="#ea580c" stroke-width="1" stroke-dasharray="2,2" opacity="0.4"/>
-<text x="60" y="18" font-size="15" font-weight="700" fill="#111">HPA scale-out under real load: backend-hpa, k3d cluster</text>
+<circle cx="108.0" cy="302.0" r="3" fill="#2563eb"/>
+<circle cx="124.0" cy="268.0" r="3" fill="#2563eb"/>
+<circle cx="140.0" cy="268.0" r="3" fill="#2563eb"/>
+<circle cx="156.0" cy="268.0" r="3" fill="#2563eb"/>
+<circle cx="172.0" cy="268.0" r="3" fill="#2563eb"/>
+<circle cx="188.0" cy="268.0" r="3" fill="#2563eb"/>
+<circle cx="204.0" cy="268.0" r="3" fill="#2563eb"/>
+<circle cx="220.0" cy="268.0" r="3" fill="#2563eb"/>
+<circle cx="236.0" cy="268.0" r="3" fill="#2563eb"/>
+<circle cx="252.0" cy="268.0" r="3" fill="#2563eb"/>
+<circle cx="268.0" cy="268.0" r="3" fill="#2563eb"/>
+<circle cx="284.0" cy="268.0" r="3" fill="#2563eb"/>
+<circle cx="300.0" cy="268.0" r="3" fill="#2563eb"/>
+<circle cx="316.0" cy="268.0" r="3" fill="#2563eb"/>
+<circle cx="666.9" cy="268.0" r="3" fill="#2563eb"/>
+<circle cx="668.0" cy="302.0" r="3" fill="#2563eb"/>
+<polyline points="60.0,370.0 76.0,370.0 92.0,312.2 108.0,87.8 124.0,87.8 140.0,183.0 156.0,179.6 172.0,295.2 188.0,370.0 204.0,370.0 220.0,370.0 236.0,370.0 252.0,370.0 268.0,370.0 284.0,370.0 300.0,370.0 316.0,370.0 666.9,370.0 668.0,370.0" fill="none" stroke="#ea580c" stroke-width="1.5" opacity="0.7"/>
+<line x1="60" y1="166.0" x2="700" y2="166.0" stroke="#ea580c" stroke-width="1" stroke-dasharray="2,2" opacity="0.4"/>
+<text x="60" y="18" font-size="15" font-weight="700" fill="#111">HPA scale-out under real load: backend-hpa, k3d cluster (2026-09-29 run)</text>
 <line x1="510" y1="42" x2="535" y2="42" stroke="#2563eb" stroke-width="3"/>
 <text x="540" y="46" font-size="11" fill="#333">Replicas</text>
 <line x1="510" y1="60" x2="535" y2="60" stroke="#059669" stroke-width="2.5" stroke-dasharray="5,3"/>
-<text x="540" y="64" font-size="11" fill="#333">Offered load (VUs)</text>
+<text x="540" y="64" font-size="11" fill="#333">Offered load (VUs, design ramp)</text>
 <line x1="510" y1="78" x2="535" y2="78" stroke="#ea580c" stroke-width="1.5"/>
 <text x="540" y="82" font-size="11" fill="#333">CPU % of 60% target (ref.)</text>
 </svg>

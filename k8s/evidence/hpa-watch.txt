@@ -1,23 +1,31 @@
 NAME          REFERENCE            TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
-backend-hpa   Deployment/backend   cpu: 3%/60%   2         10        2          2m17s
-backend-hpa   Deployment/backend   cpu: 2%/60%   2         10        2          2m30s
-backend-hpa   Deployment/backend   cpu: 20%/60%   2         10        2          2m45s
-backend-hpa   Deployment/backend   cpu: 101%/60%   2         10        2          3m
-backend-hpa   Deployment/backend   cpu: 2%/60%     2         10        4          3m15s
-backend-hpa   Deployment/backend   cpu: 2%/60%     2         10        4          3m30s
-backend-hpa   Deployment/backend   cpu: 1%/60%     2         10        4          3m45s
-backend-hpa   Deployment/backend   cpu: 2%/60%     2         10        4          4m
-backend-hpa   Deployment/backend   cpu: 2%/60%     2         10        4          4m16s
-backend-hpa   Deployment/backend   cpu: 3%/60%     2         10        4          4m31s
-backend-hpa   Deployment/backend   cpu: 3%/60%     2         10        4          4m46s
-backend-hpa   Deployment/backend   cpu: 52%/60%    2         10        4          5m1s
-backend-hpa   Deployment/backend   cpu: 52%/60%    2         10        4          5m16s
-backend-hpa   Deployment/backend   cpu: 52%/60%    2         10        4          5m46s
-backend-hpa   Deployment/backend   cpu: 51%/60%    2         10        4          6m1s
-backend-hpa   Deployment/backend   cpu: 52%/60%    2         10        4          6m16s
-backend-hpa   Deployment/backend   cpu: 52%/60%    2         10        4          6m31s
-backend-hpa   Deployment/backend   cpu: 31%/60%    2         10        4          6m46s
-backend-hpa   Deployment/backend   cpu: 2%/60%     2         10        4          7m1s
-backend-hpa   Deployment/backend   cpu: 3%/60%     2         10        4          7m16s
-backend-hpa   Deployment/backend   cpu: 3%/60%     2         10        4          7m31s
-backend-hpa   Deployment/backend   cpu: 4%/60%     2         10        4          7m46s
+backend-hpa   Deployment/backend   cpu: 0%/60%   2         10        2          34h
+backend-hpa   Deployment/backend   cpu: 0%/60%   2         10        2          34h
+backend-hpa   Deployment/backend   cpu: 17%/60%   2         10        2          34h
+backend-hpa   Deployment/backend   cpu: 83%/60%   2         10        2          34h
+backend-hpa   Deployment/backend   cpu: 83%/60%   2         10        3          34h
+backend-hpa   Deployment/backend   cpu: 55%/60%   2         10        3          34h
+backend-hpa   Deployment/backend   cpu: 56%/60%   2         10        3          34h
+backend-hpa   Deployment/backend   cpu: 22%/60%   2         10        3          34h
+backend-hpa   Deployment/backend   cpu: 0%/60%    2         10        3          34h
+backend-hpa   Deployment/backend   cpu: 0%/60%    2         10        3          34h
+backend-hpa   Deployment/backend   cpu: 0%/60%    2         10        3          34h
+backend-hpa   Deployment/backend   cpu: 0%/60%    2         10        3          34h
+backend-hpa   Deployment/backend   cpu: 0%/60%    2         10        3          34h
+backend-hpa   Deployment/backend   cpu: 0%/60%    2         10        3          34h
+backend-hpa   Deployment/backend   cpu: 0%/60%    2         10        3          34h
+backend-hpa   Deployment/backend   cpu: 0%/60%    2         10        3          34h
+backend-hpa   Deployment/backend   cpu: 0%/60%    2         10        3          34h
+
+[watch left running past the excerpt above; the deployment held at 3 replicas for the default
+5-minute scale-down stabilization window, then the HPA controller rescaled it back to 2 once
+metrics stayed below target. Confirmed via `kubectl -n civicpulse get hpa backend-hpa` and
+`kubectl -n civicpulse get events` afterward:]
+
+backend-hpa   Deployment/backend   cpu: 0%/60%   2         10        2          34h
+
+Deployment events for the same cycle (kubectl -n civicpulse get events --sort-by=.lastTimestamp):
+  SuccessfulRescale  horizontalpodautoscaler/backend-hpa   New size: 3; reason: cpu resource utilization (percentage of request) above target
+  ScalingReplicaSet  deployment/backend                    Scaled up replica set backend-68457fb564 from 2 to 3
+  SuccessfulRescale  horizontalpodautoscaler/backend-hpa   New size: 2; reason: All metrics below target
+  ScalingReplicaSet  deployment/backend                    Scaled down replica set backend-68457fb564 from 3 to 2
